@@ -41,13 +41,13 @@ class BalanceController extends Controller
     }
 
     /**
-     * Get Balance History
+     * Get Balance Riwayat
      */
     public function histories(Request $request)
     {
         $query = TopupHistory::with(['mitra', 'topup']);
 
-        //admin, filter by mitra_id
+        //admin, filter berdasar mitra_id
         if ($request->user()->hasRole('admin')) {
             if ($request->mitra_id) {
                 $query->where('mitra_id', $request->mitra_id);

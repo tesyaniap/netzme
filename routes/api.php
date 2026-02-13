@@ -32,14 +32,7 @@ Route::prefix('v1')->group(function () {
     // protected
     Route::middleware('auth:api')->group(function () {
 
-        // Both admin & mitra
-        Route::middleware('role.permission:admin,mitra')->group(function () {
-            Route::get('/balance', [BalanceController::class, 'index']);
-            Route::get('/balances/histories', [BalanceController::class, 'histories']);
-            Route::get('/fee/ledgers', [FeeLedgerController::class, 'index']);
-        });
-
-        // admin only
+        // admin
         Route::middleware('role.permission:admin')->group(function () {
             
             // Dashboard Admin
@@ -54,7 +47,7 @@ Route::prefix('v1')->group(function () {
                 Route::delete('/{id}', [UserController::class, 'destroy'])->middleware('permission:users.delete');
             });
 
-            // Role & Permission Management
+            // Role Permission Management
             Route::prefix('roles')->group(function () {
                 Route::get('/', [RoleController::class, 'index'])->middleware('permission:roles.view');
                 Route::post('/', [RoleController::class, 'store'])->middleware('permission:roles.create');
@@ -74,7 +67,7 @@ Route::prefix('v1')->group(function () {
                 Route::put('/{id}/fee', [MitraController::class, 'updateFee'])->middleware('permission:mitra.fee');
             });
 
-            // Topup Management (Admin only)
+            // Topup Management (Admin)
             Route::prefix('topups')->group(function () {
                 Route::post('/{id}/approve', [TopupController::class, 'approve'])->middleware('permission:topups.approve');
                 Route::post('/{id}/reject', [TopupController::class, 'reject'])->middleware('permission:topups.reject');
@@ -85,21 +78,26 @@ Route::prefix('v1')->group(function () {
                 Route::get('/topups', [ReportController::class, 'topups'])->middleware('permission:reports.topups');
                 Route::get('/fees', [ReportController::class, 'fees'])->middleware('permission:reports.fees');
                 Route::get('/balances', [ReportController::class, 'balances'])->middleware('permission:reports.balances');
+                
+                // Export pdf
+                Route::get('/export/{type}', [ReportController::class, 'exportData'])
+                    ->where('type', 'transactions|topups|fees|balances');
+                Route::post('/export/combined', [ReportController::class, 'exportCombinedData']);
             });
         });
 
-        // mitra only
+        // mitra
         Route::middleware('role.permission:mitra')->group(function () {
             
             // Dashboard Mitra
             Route::get('/dashboard/mitra', [DashboardController::class, 'mitra'])->middleware('permission:dashboard.partner');
 
-            // Topup Management (Mitra only)
+            // Topup Management (Mitra)
             Route::prefix('topups')->group(function () {
                 Route::post('/', [TopupController::class, 'store'])->middleware('permission:topups.create');
             });
             
-            // Transaction Management (Mitra only)
+            // Transaction Management (Mitra)
             Route::prefix('transactions')->group(function () {
                 Route::post('/search', [TransactionController::class, 'search'])->middleware('permission:transactions.view');
                 Route::post('/seat-map', [TransactionController::class, 'seatMap'])->middleware('permission:transactions.view');
@@ -121,16 +119,17 @@ Route::prefix('v1')->group(function () {
             Route::get('/balance', [BalanceController::class, 'index'])->middleware('permission:balance.view');
             Route::get('/balance/histories', [BalanceController::class, 'histories'])->middleware('permission:balance.histories');
             Route::get('/fee/ledgers', [FeeLedgerController::class, 'index'])->middleware('permission:fee-ledgers.view');
+            Route::get('/fee/config', [FeeLedgerController::class, 'feeConfig']);
         });
 
-        // Both admin & mitra (view transactions)
+        //view transactions (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->group(function () {
             Route::get('/transactions/{trx_code}', [TransactionController::class, 'show'])->middleware('permission:transactions.view');
         });
     });
 
-    // Callback signature verif
-    Route::middleware('verify.signature')->prefix('callbacks')->group(function () {
+    // Callback (No Auth)
+    Route::prefix('callbacks')->group(function () {
         Route::post('/provider/payment', [CallbackController::class, 'payment']);
         Route::post('/provider/ticket', [CallbackController::class, 'ticket']);
     });

@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use App\Models\TransactionPassenger;
 use App\Models\TransactionFee;
 use App\Models\PartnerFeeLedger;
+use App\Models\Mitra;
 use Illuminate\Http\Request;
 use Illuminate\support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -17,7 +18,7 @@ class TransactionController extends Controller
     use ApiResponse;
 
     /**
-     * Transaction Search
+     * Mrncari transaksi yang tersedia
      */
     public function search(Request $request)
     {
@@ -40,7 +41,7 @@ class TransactionController extends Controller
     }
 
     /**
-     * transaction seatmap
+     * Seat-Map Bus transaksi
      */
 
     public function seatMap(Request $request)
@@ -59,7 +60,7 @@ class TransactionController extends Controller
     }
 
     /**
-     * Book Transaction 
+     * Book Transaction (seat - map)
     **/
     public function book(Request $request)
     {
@@ -114,7 +115,7 @@ class TransactionController extends Controller
     }
     
     /**
-     * transcation pay
+     * bayar transaksi (seat-map)
      */
     public function pay(Request $request)
     {
@@ -136,13 +137,23 @@ class TransactionController extends Controller
 
         DB::beginTransaction();
         try {
+            // lock mitra untuk mengatasi kondisi race
+            $mitra = $mitra->lockForUpdate()->find($mitra->id);
+            
+            //re - check balance setelah lock
+            if ($mitra->balance < $transaction->amount) {
+                DB::rollBack();
+                return $this->errorResponse('insufficient balance', [], 400);
+            }
+
             $balanceBefore = $mitra->balance;
             $balanceAfter = $balanceBefore - $transaction->amount;
 
-            // Deduct balance
-            $mitra->update(['balance' => $balanceAfter]);
+            //update balance
+            $mitra->balance = $balanceAfter;
+            $mitra->save();
 
-            // Update transaction
+            //update transaction
             $transaction->update(['status' => 'paid']);
 
             DB::commit();
@@ -153,7 +164,6 @@ class TransactionController extends Controller
                 'balance_before' => $balanceBefore,
                 'balance_after' => $balanceAfter,
             ]);
-
         } catch (\Exception $e) {
             DB::rollBack();
             return $this->errorResponse('Payment failed', ['error' => $e->getMessage()], 500);
@@ -190,10 +200,13 @@ class TransactionController extends Controller
 
         DB::beginTransaction();
         try {
+            // Lock mitra untuk update balance fee
+            $mitra = Mitra::lockForUpdate()->find($transaction->mitra_id);
+            
             // Update status
             $transaction->update(['status' => 'issued']);
 
-            // Calculate and save fee (example: 5% or from partner_fees table)
+            // Calculate and save fee
             $feeAmount = $transaction->amount * 0.05;
 
             TransactionFee::create([
@@ -204,13 +217,22 @@ class TransactionController extends Controller
                 'fee_amount' => $feeAmount,
             ]);
 
+            $balanceBefore = $mitra->balance;
+            $balanceAfter = $balanceBefore + $feeAmount;
+
             PartnerFeeLedger::create([
                 'mitra_id' => $transaction->mitra_id,
                 'transaction_id' => $transaction->id,
                 'amount' => $feeAmount,
                 'type' => 'credit',
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
                 'description' => 'Fee from transaction ' . $trxCode,
             ]);
+
+            // Update balance mitra dengan fee
+            $mitra->balance = $balanceAfter;
+            $mitra->save();
 
             DB::commit();
 
@@ -218,6 +240,7 @@ class TransactionController extends Controller
                 'trx_code' => $trxCode,
                 'status' => 'issued',
                 'fee_earned' => $feeAmount,
+                'balance_after' => $balanceAfter,
             ]);
 
         } catch (\Exception $e) {
@@ -247,8 +270,10 @@ class TransactionController extends Controller
 
             // Refund apabila sudah paid
             if ($transaction->status === 'paid') {
-                $mitra = $transaction->mitra;
-                $mitra->update(['balance' => $mitra->balance + $transaction->amount]);
+                // Lock mitra untuk refund balance
+                $mitra = Mitra::lockForUpdate()->find($transaction->mitra_id);
+                $mitra->balance = $mitra->balance + $transaction->amount;
+                $mitra->save();
                 $refundAmount = $transaction->amount;
             }
 

@@ -14,7 +14,7 @@ class CallbackController extends Controller
     use ApiResponse;
 
     /**
-     * Payment Callback from Provider
+     * Payment Callback harusnya dari Provider
      */
     public function payment(Request $request)
     {
@@ -46,7 +46,7 @@ class CallbackController extends Controller
 
                 Log::info('Payment callback: Success', ['trx_code' => $request->trx_code]);
             } else {
-                // Payment failed - refund balance if already deducted
+                // Payment failed, kembalikan dana
                 if ($transaction->status === 'paid') {
                     $mitra = $transaction->mitra;
                     $mitra->update(['balance' => $mitra->balance + $transaction->amount]);
@@ -78,7 +78,7 @@ class CallbackController extends Controller
     }
 
     /**
-     * Ticket Callback from Provider
+     * Ticket Callback harusnya dr Provider
      */
     public function ticket(Request $request)
     {
@@ -99,7 +99,7 @@ class CallbackController extends Controller
 
             DB::beginTransaction();
 
-            // Update transaction based on ticket status
+            // Update transaction berdasar status ticket
             if ($request->status === 'issued') {
                 $transaction->update([
                     'status' => 'issued',

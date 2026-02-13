@@ -59,7 +59,7 @@ class RoleController extends Controller
     }
 
     /**
-     * New Role
+     * Buat Role
      */
     public function store(Request $request)
     {

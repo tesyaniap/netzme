@@ -15,7 +15,7 @@ class AuthController extends Controller
     use ApiResponse;
 
     /**
-     * Login admin dan mitra
+     * Login admin / mitra
      * 
      */
     public function login(LoginRequest $request)
@@ -73,7 +73,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Get User Terkini
+     * Get User active
      */
     public function me(Request $request)
     {

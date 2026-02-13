@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -14,7 +15,6 @@ class ReportController extends Controller
 {
     use ApiResponse;
 
-    // GET /api/v1/reports/transactions
     public function transactions(Request $request)
     {
         $request->validate([
@@ -24,16 +24,12 @@ class ReportController extends Controller
             'mitra_id' => 'nullable|exists:mitra,id',
         ]);
 
-        $query = Transaction::with(['mitra', 'transactionFee']);
+        $query = Transaction::with(['mitra', 'transactionFee', 'user']);
 
-        // Filter by role
-        if ($request->user()->hasRole('mitra')) {
-            $query->where('mitra_id', $request->user()->mitra_id);
-        } elseif ($request->mitra_id) {
+        if ($request->mitra_id) {
             $query->where('mitra_id', $request->mitra_id);
         }
 
-        // Filter by date
         if ($request->start_date) {
             $query->whereDate('created_at', '>=', $request->start_date);
         }
@@ -41,7 +37,6 @@ class ReportController extends Controller
             $query->whereDate('created_at', '<=', $request->end_date);
         }
 
-        // Filter by status
         if ($request->status) {
             if ($request->status === 'success') {
                 $query->whereIn('status', ['paid', 'issued']);
@@ -55,6 +50,12 @@ class ReportController extends Controller
         if ($transactions->isEmpty()) {
             return $this->successResponse([], 'Transaction report retrieved');
         }
+
+        $summary = [
+            'total_transactions' => $transactions->count(),
+            'total_amount' => $transactions->sum('amount'),
+            'by_status' => $transactions->groupBy('status')->map->count(),
+        ];
 
         // Format data untuk frontend
         $formattedData = $transactions->map(function($transaction) {
@@ -72,7 +73,6 @@ class ReportController extends Controller
         return $this->successResponse($formattedData, 'Transaction report retrieved');
     }
 
-    // GET /api/v1/reports/topups
     public function topups(Request $request)
     {
         $request->validate([
@@ -84,14 +84,10 @@ class ReportController extends Controller
 
         $query = Topup::with(['mitra', 'approver']);
 
-        // Filter by role
-        if ($request->user()->hasRole('mitra')) {
-            $query->where('mitra_id', $request->user()->mitra_id);
-        } elseif ($request->mitra_id) {
+        if ($request->mitra_id) {
             $query->where('mitra_id', $request->mitra_id);
         }
 
-        // Filter by date
         if ($request->date_from) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
@@ -99,20 +95,19 @@ class ReportController extends Controller
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
-        // Filter by status
         if ($request->status) {
             $query->where('status', $request->status);
         }
 
         $topups = $query->latest()->paginate(50);
 
-        // Summary
         $summary = [
             'total_topups' => $query->count(),
             'total_amount' => $query->where('status', 'success')->sum('amount'),
-            'by_status' => Topup::selectRaw('status, COUNT(*) as count')
-                ->when($request->user()->hasRole('mitra'), function($q) use ($request) {
-                    $q->where('mitra_id', $request->user()->mitra_id);
+            'by_status' => DB::table('topups')
+                ->selectRaw('status, COUNT(*) as count')
+                ->when($request->mitra_id, function($q) use ($request) {
+                    $q->where('mitra_id', $request->mitra_id);
                 })
                 ->groupBy('status')
                 ->pluck('count', 'status'),
@@ -124,7 +119,6 @@ class ReportController extends Controller
         ]);
     }
 
-    // GET /api/v1/reports/fees
     public function fees(Request $request)
     {
         $request->validate([
@@ -135,32 +129,30 @@ class ReportController extends Controller
 
         $query = TransactionFee::with(['mitra', 'transaction']);
 
-        // Filter by role
-        if ($request->user()->hasRole('mitra')) {
-            $query->where('mitra_id', $request->user()->mitra_id);
-        } elseif ($request->mitra_id) {
+        if ($request->mitra_id) {
             $query->where('mitra_id', $request->mitra_id);
         }
 
-        // Filter by date
         if ($request->date_from) {
-            $query->whereDate('created_at', '>=', $request->date_from);
+            $query->whereHas('transaction', function($q) use ($request) {
+                $q->whereDate('created_at', '>=', $request->date_from);
+            });
         }
         if ($request->date_to) {
-            $query->whereDate('created_at', '<=', $request->date_to);
+            $query->whereHas('transaction', function($q) use ($request) {
+                $q->whereDate('created_at', '<=', $request->date_to);
+            });
         }
 
-        $fees = $query->latest()->paginate(50);
+        $fees = $query->latest('id')->paginate(50);
 
-        // Summary
         $summary = [
             'total_fee' => $query->sum('fee_amount'),
-        ];
-
-        // By mitra (admin only)
-        if ($request->user()->hasRole('admin')) {
-            $summary['by_mitra'] = TransactionFee::select('mitra_id', DB::raw('SUM(fee_amount) as total_fee'))
+            'by_mitra' => TransactionFee::select('mitra_id', DB::raw('SUM(fee_amount) as total_fee'))
                 ->with('mitra:id,name')
+                ->when($request->mitra_id, function($q) use ($request) {
+                    $q->where('mitra_id', $request->mitra_id);
+                })
                 ->groupBy('mitra_id')
                 ->get()
                 ->map(function($item) {
@@ -169,8 +161,8 @@ class ReportController extends Controller
                         'mitra_name' => $item->mitra->name,
                         'total_fee' => $item->total_fee,
                     ];
-                });
-        }
+                }),
+        ];
 
         return $this->successResponse('Fee report retrieved', [
             'summary' => $summary,
@@ -178,24 +170,8 @@ class ReportController extends Controller
         ]);
     }
 
-    // GET /api/v1/reports/balances
     public function balances(Request $request)
     {
-        if ($request->user()->hasRole('mitra')) {
-            // Mitra only see own balance
-            $mitra = Mitra::with(['topups', 'transactions'])
-                ->find($request->user()->mitra_id);
-
-            return $this->successResponse('Balance report retrieved', [
-                'mitra_id' => $mitra->id,
-                'mitra_name' => $mitra->name,
-                'balance' => $mitra->balance,
-                'last_topup' => $mitra->topups()->latest()->first()?->created_at,
-                'last_transaction' => $mitra->transactions()->latest()->first()?->created_at,
-            ]);
-        }
-
-        // Admin see all mitra balances
         $mitras = Mitra::select('id', 'name', 'balance')
             ->withCount('transactions')
             ->get()
