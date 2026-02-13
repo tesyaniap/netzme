@@ -27,21 +27,18 @@ class MitraController extends Controller
             $code = 'MTR' . strtoupper(substr(uniqid(), -6));
 
             $mitra = Mitra::create([
+            
                 'code' => $code,
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
-<<<<<<< HEAD
-                'status' => 'pending',  // Status pending, butuh approval
-=======
                 'status' => 'pending',
->>>>>>> e1f2337187b1bcea2680a936c2e795205eb2bbe0
                 'balance' => 0
             ]);
 
             return $this->successResponse(
-                'Mitra registered successfully with pending status. Wait for admin approval.',
                 $mitra,
+                'Mitra registered successfully with pending status. Wait for admin approval.',
                 201
             );
 

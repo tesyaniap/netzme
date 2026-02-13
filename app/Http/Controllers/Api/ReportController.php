@@ -18,13 +18,13 @@ class ReportController extends Controller
     public function transactions(Request $request)
     {
         $request->validate([
-            'date_from' => 'nullable|date',
-            'date_to' => 'nullable|date',
-            'status' => 'nullable|in:pending,paid,issued,cancelled,failed',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'status' => 'nullable|in:pending,paid,issued,cancelled,failed,success',
             'mitra_id' => 'nullable|exists:mitra,id',
         ]);
 
-        $query = Transaction::with(['mitra', 'user', 'passengers']);
+        $query = Transaction::with(['mitra', 'transactionFee']);
 
         // Filter by role
         if ($request->user()->hasRole('mitra')) {
@@ -34,36 +34,42 @@ class ReportController extends Controller
         }
 
         // Filter by date
-        if ($request->date_from) {
-            $query->whereDate('created_at', '>=', $request->date_from);
+        if ($request->start_date) {
+            $query->whereDate('created_at', '>=', $request->start_date);
         }
-        if ($request->date_to) {
-            $query->whereDate('created_at', '<=', $request->date_to);
+        if ($request->end_date) {
+            $query->whereDate('created_at', '<=', $request->end_date);
         }
 
         // Filter by status
         if ($request->status) {
-            $query->where('status', $request->status);
+            if ($request->status === 'success') {
+                $query->whereIn('status', ['paid', 'issued']);
+            } else {
+                $query->where('status', $request->status);
+            }
         }
 
-        $transactions = $query->latest()->paginate(50);
+        $transactions = $query->latest()->get();
 
-        // Summary
-        $summary = [
-            'total_transactions' => $query->count(),
-            'total_amount' => $query->sum('amount'),
-            'by_status' => Transaction::selectRaw('status, COUNT(*) as count')
-                ->when($request->user()->hasRole('mitra'), function($q) use ($request) {
-                    $q->where('mitra_id', $request->user()->mitra_id);
-                })
-                ->groupBy('status')
-                ->pluck('count', 'status'),
-        ];
+        if ($transactions->isEmpty()) {
+            return $this->successResponse([], 'Transaction report retrieved');
+        }
 
-        return $this->successResponse('Transaction report retrieved', [
-            'summary' => $summary,
-            'transactions' => $transactions,
-        ]);
+        // Format data untuk frontend
+        $formattedData = $transactions->map(function($transaction) {
+            return [
+                'id' => $transaction->id,
+                'tanggal' => $transaction->created_at,
+                'mitra' => $transaction->mitra->name ?? '-',
+                'jenis_transaksi' => 'Pembelian Tiket',
+                'jumlah' => $transaction->amount ?? 0,
+                'fee' => $transaction->transactionFee->fee_amount ?? 0,
+                'status' => $transaction->status ?? '-',
+            ];
+        });
+
+        return $this->successResponse($formattedData, 'Transaction report retrieved');
     }
 
     // GET /api/v1/reports/topups

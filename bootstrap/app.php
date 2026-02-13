@@ -16,7 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role.permission' => \App\Http\Middleware\RolePermission::class,
             'verify.signature' => \App\Http\Middleware\VerifySignature::class,
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
         
         // Add CORS globally to handle preflight requests

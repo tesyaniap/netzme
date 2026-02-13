@@ -43,48 +43,48 @@ Route::prefix('v1')->group(function () {
         Route::middleware('role.permission:admin')->group(function () {
             
             // Dashboard Admin
-            Route::get('/dashboard/admin', [DashboardController::class, 'admin']);
+            Route::get('/dashboard/admin', [DashboardController::class, 'admin'])->middleware('permission:dashboard.admin');
 
             // User Management
             Route::prefix('users')->group(function () {
-                Route::get('/', [UserController::class, 'index']);
-                Route::post('/', [UserController::class, 'store']);
-                Route::get('/{id}', [UserController::class, 'show']);
-                Route::put('/{id}', [UserController::class, 'update']);
-                Route::delete('/{id}', [UserController::class, 'destroy']);
+                Route::get('/', [UserController::class, 'index'])->middleware('permission:users.view');
+                Route::post('/', [UserController::class, 'store'])->middleware('permission:users.create');
+                Route::get('/{id}', [UserController::class, 'show'])->middleware('permission:users.view');
+                Route::put('/{id}', [UserController::class, 'update'])->middleware('permission:users.update');
+                Route::delete('/{id}', [UserController::class, 'destroy'])->middleware('permission:users.delete');
             });
 
             // Role & Permission Management
             Route::prefix('roles')->group(function () {
-                Route::get('/', [RoleController::class, 'index']);
-                Route::post('/', [RoleController::class, 'store']);
-                Route::get('/{id}', [RoleController::class, 'show']);
-                Route::put('/{id}', [RoleController::class, 'update']);
-                Route::post('/{id}/permissions', [RoleController::class, 'assignPermissions']);
+                Route::get('/', [RoleController::class, 'index'])->middleware('permission:roles.view');
+                Route::post('/', [RoleController::class, 'store'])->middleware('permission:roles.create');
+                Route::get('/{id}', [RoleController::class, 'show'])->middleware('permission:roles.view');
+                Route::put('/{id}', [RoleController::class, 'update'])->middleware('permission:roles.update');
+                Route::post('/{id}/permissions', [RoleController::class, 'assignPermissions'])->middleware('permission:permissions.assign');
             });
-            Route::get('/permissions', [RoleController::class, 'permissions']);
+            Route::get('/permissions', [RoleController::class, 'permissions'])->middleware('permission:permissions.view');
             
             // Mitra Management
             Route::prefix('mitra')->group(function () {
-                Route::post('/register', [MitraController::class, 'register']);
-                Route::get('/', [MitraController::class, 'index']);
-                Route::get('/{id}', [MitraController::class, 'show']);
-                Route::post('/{id}/approve', [MitraController::class, 'approve']);
-                Route::post('/{id}/reject', [MitraController::class, 'reject']);
-                Route::put('/{id}/fee', [MitraController::class, 'updateFee']);
+                Route::post('/register', [MitraController::class, 'register'])->middleware('permission:mitra.create');
+                Route::get('/', [MitraController::class, 'index'])->middleware('permission:mitra.view');
+                Route::get('/{id}', [MitraController::class, 'show'])->middleware('permission:mitra.view');
+                Route::post('/{id}/approve', [MitraController::class, 'approve'])->middleware('permission:mitra.approve');
+                Route::post('/{id}/reject', [MitraController::class, 'reject'])->middleware('permission:mitra.reject');
+                Route::put('/{id}/fee', [MitraController::class, 'updateFee'])->middleware('permission:mitra.fee');
             });
 
             // Topup Management (Admin only)
             Route::prefix('topups')->group(function () {
-                Route::post('/{id}/approve', [TopupController::class, 'approve']);
-                Route::post('/{id}/reject', [TopupController::class, 'reject']);
+                Route::post('/{id}/approve', [TopupController::class, 'approve'])->middleware('permission:topups.approve');
+                Route::post('/{id}/reject', [TopupController::class, 'reject'])->middleware('permission:topups.reject');
             });
 
             Route::prefix('reports')->group(function () {
-                Route::get('/transactions', [ReportController::class, 'transactions']);
-                Route::get('/topups', [ReportController::class, 'topups']);
-                Route::get('/fees', [ReportController::class, 'fees']);
-                Route::get('/balances', [ReportController::class, 'balances']);
+                Route::get('/transactions', [ReportController::class, 'transactions'])->middleware('permission:reports.transactions');
+                Route::get('/topups', [ReportController::class, 'topups'])->middleware('permission:reports.topups');
+                Route::get('/fees', [ReportController::class, 'fees'])->middleware('permission:reports.fees');
+                Route::get('/balances', [ReportController::class, 'balances'])->middleware('permission:reports.balances');
             });
         });
 
@@ -92,40 +92,40 @@ Route::prefix('v1')->group(function () {
         Route::middleware('role.permission:mitra')->group(function () {
             
             // Dashboard Mitra
-            Route::get('/dashboard/mitra', [DashboardController::class, 'mitra']);
+            Route::get('/dashboard/mitra', [DashboardController::class, 'mitra'])->middleware('permission:dashboard.partner');
 
             // Topup Management (Mitra only)
             Route::prefix('topups')->group(function () {
-                Route::post('/', [TopupController::class, 'store']);
+                Route::post('/', [TopupController::class, 'store'])->middleware('permission:topups.create');
             });
             
             // Transaction Management (Mitra only)
             Route::prefix('transactions')->group(function () {
-                Route::post('/search', [TransactionController::class, 'search']);
-                Route::post('/seat-map', [TransactionController::class, 'seatMap']);
-                Route::post('/book', [TransactionController::class, 'book']);
-                Route::post('/pay', [TransactionController::class, 'pay']);
-                Route::post('/{trx_code}/issue', [TransactionController::class, 'issue']);
-                Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel']);
+                Route::post('/search', [TransactionController::class, 'search'])->middleware('permission:transactions.view');
+                Route::post('/seat-map', [TransactionController::class, 'seatMap'])->middleware('permission:transactions.view');
+                Route::post('/book', [TransactionController::class, 'book'])->middleware('permission:transactions.create');
+                Route::post('/pay', [TransactionController::class, 'pay'])->middleware('permission:transactions.pay');
+                Route::post('/{trx_code}/issue', [TransactionController::class, 'issue'])->middleware('permission:transactions.issue');
+                Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel'])->middleware('permission:transactions.cancel');
             });
         });
 
         // Topup Management (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('topups')->group(function () {
-            Route::get('/', [TopupController::class, 'index']);
-            Route::get('/{id}', [TopupController::class, 'show']);
+            Route::get('/', [TopupController::class, 'index'])->middleware('permission:topups.view');
+            Route::get('/{id}', [TopupController::class, 'show'])->middleware('permission:topups.view');
         });
 
         // Balance & Ledger (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->group(function () {
-            Route::get('/balance', [BalanceController::class, 'index']);
-            Route::get('/balance/histories', [BalanceController::class, 'histories']);
-            Route::get('/fee/ledgers', [FeeLedgerController::class, 'index']);
+            Route::get('/balance', [BalanceController::class, 'index'])->middleware('permission:balance.view');
+            Route::get('/balance/histories', [BalanceController::class, 'histories'])->middleware('permission:balance.histories');
+            Route::get('/fee/ledgers', [FeeLedgerController::class, 'index'])->middleware('permission:fee-ledgers.view');
         });
 
         // Both admin & mitra (view transactions)
         Route::middleware('role.permission:admin,mitra')->group(function () {
-            Route::get('/transactions/{trx_code}', [TransactionController::class, 'show']);
+            Route::get('/transactions/{trx_code}', [TransactionController::class, 'show'])->middleware('permission:transactions.view');
         });
     });
 
