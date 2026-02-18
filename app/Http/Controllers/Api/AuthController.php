@@ -16,7 +16,6 @@ class AuthController extends Controller
 
     /**
      * Login admin / mitra
-     * 
      */
     public function login(LoginRequest $request)
     {

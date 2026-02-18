@@ -171,4 +171,41 @@ class MitraController extends Controller
             'reason' => $request->reason
         ]);
     }
+
+    /**
+     * Deactivate Mitra
+     */
+    public function deactivate(Request $request, $id)
+    {
+        $request->validate([
+            'reason' => 'nullable|string|max:500'
+        ]);
+
+        $mitra = Mitra::find($id);
+        
+        if (!$mitra) {
+            return $this->errorResponse('Mitra not found', null, 404);
+        }
+
+        if ($mitra->status !== 'active') {
+            return $this->errorResponse('Only active mitra can be deactivated', null, 400);
+        }
+
+        // Cek apakah ada transaksi pending/paid
+        $pendingTransactions = $mitra->transactions()
+            ->whereIn('status', ['pending', 'paid'])
+            ->count();
+
+        if ($pendingTransactions > 0) {
+            return $this->errorResponse('Cannot deactivate mitra with pending/paid transactions', null, 400);
+        }
+
+        // Update status mitra
+        $mitra->update(['status' => 'inactive']);
+
+        return $this->successResponse('Mitra deactivated successfully', [
+            'mitra' => $mitra,
+            'reason' => $request->reason
+        ]);
+    } 
 }

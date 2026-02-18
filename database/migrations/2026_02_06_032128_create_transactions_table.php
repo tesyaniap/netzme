@@ -23,7 +23,7 @@ return new class extends Migration
             $table->decimal('amount', 15, 2);
             $table->enum('status', ['pending', 'paid', 'issued', 'failed']);
             $table->json('provider_response');
-            $table->timestamp('created_at')->nullable();
+            $table->timestamp('created_at')->useCurrent();
         });
     }
 

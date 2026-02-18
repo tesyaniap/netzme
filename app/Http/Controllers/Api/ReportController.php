@@ -10,6 +10,7 @@ use App\Models\TransactionFee;
 use App\Models\Mitra;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use TCPDF;
 
 class ReportController extends Controller
 {
@@ -24,7 +25,11 @@ class ReportController extends Controller
             'mitra_id' => 'nullable|exists:mitra,id',
         ]);
 
+<<<<<<< HEAD
         $query = Transaction::with(['mitra', 'transactionFee', 'user']);
+=======
+        $query = Transaction::with(['mitra', 'fee', 'user']);
+>>>>>>> e10e88d012580f5ef23d449859a8d54964230450
 
         if ($request->mitra_id) {
             $query->where('mitra_id', $request->mitra_id);
@@ -45,7 +50,11 @@ class ReportController extends Controller
             }
         }
 
+<<<<<<< HEAD
         $transactions = $query->latest()->get();
+=======
+        $transactions = $query->latest('id')->get();
+>>>>>>> e10e88d012580f5ef23d449859a8d54964230450
 
         if ($transactions->isEmpty()) {
             return $this->successResponse([], 'Transaction report retrieved');
@@ -61,11 +70,20 @@ class ReportController extends Controller
         $formattedData = $transactions->map(function($transaction) {
             return [
                 'id' => $transaction->id,
+<<<<<<< HEAD
                 'tanggal' => $transaction->created_at,
                 'mitra' => $transaction->mitra->name ?? '-',
                 'jenis_transaksi' => 'Pembelian Tiket',
                 'jumlah' => $transaction->amount ?? 0,
                 'fee' => $transaction->transactionFee->fee_amount ?? 0,
+=======
+                'trx_code' => $transaction->trx_code,
+                'tanggal' => $transaction->created_at ?? now(),
+                'mitra' => $transaction->mitra->name ?? '-',
+                'jenis_transaksi' => 'Pembelian Tiket',
+                'jumlah' => $transaction->amount ?? 0,
+                'fee' => $transaction->fee->fee_amount ?? 0,
+>>>>>>> e10e88d012580f5ef23d449859a8d54964230450
                 'status' => $transaction->status ?? '-',
             ];
         });
@@ -193,5 +211,114 @@ class ReportController extends Controller
             'summary' => $summary,
             'balances' => $mitras,
         ]);
+    }
+
+    public function exportData(Request $request, $type)
+    {
+        $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'mitra_id' => 'nullable|exists:mitra,id',
+        ]);
+
+        $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8');
+        $pdf->SetCreator('Bridge System H2H');
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 10);
+        $pdf->AddPage();
+        $pdf->SetFont('helvetica', '', 10);
+
+        switch ($type) {
+            case 'transactions':
+                $query = Transaction::with(['mitra', 'fee']);
+                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
+                if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
+                if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
+                $data = $query->latest('id')->get();
+                
+                $pdf->SetFont('helvetica', 'B', 14);
+                $pdf->Cell(0, 10, 'Laporan Transaksi', 0, 1, 'C');
+                $pdf->SetFont('helvetica', '', 9);
+                
+                $html = '<table border="1" cellpadding="4"><thead><tr><th>Tanggal</th><th>Kode</th><th>Mitra</th><th>Jumlah</th><th>Fee</th><th>Status</th></tr></thead><tbody>';
+                foreach ($data as $item) {
+                    $html .= '<tr><td>' . $item->created_at->format('d/m/Y H:i') . '</td>';
+                    $html .= '<td>' . $item->trx_code . '</td>';
+                    $html .= '<td>' . ($item->mitra->name ?? '-') . '</td>';
+                    $html .= '<td>Rp ' . number_format($item->amount, 0, ',', '.') . '</td>';
+                    $html .= '<td>Rp ' . number_format($item->fee->fee_amount ?? 0, 0, ',', '.') . '</td>';
+                    $html .= '<td>' . $item->status . '</td></tr>';
+                }
+                $html .= '</tbody></table>';
+                $pdf->writeHTML($html, true, false, true, false, '');
+                break;
+
+            case 'topups':
+                $query = Topup::with(['mitra', 'approver']);
+                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
+                if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
+                if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
+                $data = $query->latest()->get();
+                
+                $pdf->SetFont('helvetica', 'B', 14);
+                $pdf->Cell(0, 10, 'Laporan Topup', 0, 1, 'C');
+                $pdf->SetFont('helvetica', '', 9);
+                
+                $html = '<table border="1" cellpadding="4"><thead><tr><th>Tanggal</th><th>Mitra</th><th>Jumlah</th><th>Status</th><th>Disetujui</th></tr></thead><tbody>';
+                foreach ($data as $item) {
+                    $html .= '<tr><td>' . $item->created_at->format('d/m/Y H:i') . '</td>';
+                    $html .= '<td>' . ($item->mitra->name ?? '-') . '</td>';
+                    $html .= '<td>Rp ' . number_format($item->amount, 0, ',', '.') . '</td>';
+                    $html .= '<td>' . $item->status . '</td>';
+                    $html .= '<td>' . ($item->approver->name ?? '-') . '</td></tr>';
+                }
+                $html .= '</tbody></table>';
+                $pdf->writeHTML($html, true, false, true, false, '');
+                break;
+
+            case 'fees':
+                $query = TransactionFee::with(['mitra', 'transaction']);
+                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
+                if ($request->start_date) $query->whereHas('transaction', fn($q) => $q->whereDate('created_at', '>=', $request->start_date));
+                if ($request->end_date) $query->whereHas('transaction', fn($q) => $q->whereDate('created_at', '<=', $request->end_date));
+                $data = $query->latest('id')->get();
+                
+                $pdf->SetFont('helvetica', 'B', 14);
+                $pdf->Cell(0, 10, 'Laporan Fee', 0, 1, 'C');
+                $pdf->SetFont('helvetica', '', 9);
+                
+                $html = '<table border="1" cellpadding="4"><thead><tr><th>Mitra</th><th>Transaksi</th><th>Tipe</th><th>Nilai</th><th>Jumlah</th></tr></thead><tbody>';
+                foreach ($data as $item) {
+                    $html .= '<tr><td>' . ($item->mitra->name ?? '-') . '</td>';
+                    $html .= '<td>' . ($item->transaction->trx_code ?? '-') . '</td>';
+                    $html .= '<td>' . $item->fee_type . '</td>';
+                    $html .= '<td>' . $item->fee_value . '%</td>';
+                    $html .= '<td>Rp ' . number_format($item->fee_amount, 0, ',', '.') . '</td></tr>';
+                }
+                $html .= '</tbody></table>';
+                $pdf->writeHTML($html, true, false, true, false, '');
+                break;
+
+            case 'balances':
+                $data = Mitra::select('id', 'name', 'balance')->withCount('transactions')->get();
+                
+                $pdf->SetFont('helvetica', 'B', 14);
+                $pdf->Cell(0, 10, 'Laporan Saldo', 0, 1, 'C');
+                $pdf->SetFont('helvetica', '', 9);
+                
+                $html = '<table border="1" cellpadding="4"><thead><tr><th>Mitra</th><th>Saldo</th><th>Total Transaksi</th></tr></thead><tbody>';
+                foreach ($data as $item) {
+                    $html .= '<tr><td>' . $item->name . '</td>';
+                    $html .= '<td>Rp ' . number_format($item->balance, 0, ',', '.') . '</td>';
+                    $html .= '<td>' . $item->transactions_count . '</td></tr>';
+                }
+                $html .= '</tbody></table>';
+                $pdf->writeHTML($html, true, false, true, false, '');
+                break;
+        }
+
+        return response($pdf->Output("laporan-{$type}.pdf", 'S'), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="laporan-' . $type . '-' . now()->format('YmdHis') . '.pdf"');
     }
 }

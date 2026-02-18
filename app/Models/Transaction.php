@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Transaction extends Model
 {
-    public $timestamps = false;
+    const UPDATED_AT = null;
 
     protected $fillable = [
         'trx_code',
@@ -18,7 +18,8 @@ class Transaction extends Model
         'payment_type',
         'amount',
         'status',
-        'provider_response'
+        'provider_response',
+        'created_at'
     ];
 
     protected $casts = [
