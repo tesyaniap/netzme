@@ -206,14 +206,30 @@ class TransactionController extends Controller
             // Update status
             $transaction->update(['status' => 'issued']);
 
-            // Calculate and save fee
-            $feeAmount = $transaction->amount * 0.05;
+            // Get fee configuration from partner_fees
+            $partnerFee = $mitra->partnerFees()->where('active', true)->first();
+            
+            if (!$partnerFee) {
+                // Default fee 5% if not configured
+                $feeType = 'percent';
+                $feeValue = 5;
+                $feeAmount = $transaction->amount * 0.05;
+            } else {
+                $feeType = $partnerFee->type;
+                $feeValue = $partnerFee->value;
+                
+                if ($feeType === 'percent') {
+                    $feeAmount = $transaction->amount * ($feeValue / 100);
+                } else {
+                    $feeAmount = $feeValue;
+                }
+            }
 
             TransactionFee::create([
                 'transaction_id' => $transaction->id,
                 'mitra_id' => $transaction->mitra_id,
-                'fee_type' => 'percent',
-                'fee_value' => 5,
+                'fee_type' => $feeType,
+                'fee_value' => $feeValue,
                 'fee_amount' => $feeAmount,
             ]);
 
@@ -277,13 +293,13 @@ class TransactionController extends Controller
                 $refundAmount = $transaction->amount;
             }
 
-            $transaction->update(['status' => 'cancelled']);
+            $transaction->update(['status' => 'failed']);
 
             DB::commit();
 
             return $this->successResponse('Transaction cancelled', [
                 'trx_code' => $trxCode,
-                'status' => 'cancelled',
+                'status' => 'failed',
                 'refund_amount' => $refundAmount,
             ]);
 

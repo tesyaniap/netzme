@@ -106,7 +106,6 @@ Route::prefix('v1')->group(function () {
                 Route::post('/book', [TransactionController::class, 'book'])->middleware('permission:transactions.create');
                 Route::post('/pay', [TransactionController::class, 'pay'])->middleware('permission:transactions.pay');
                 Route::post('/{trx_code}/issue', [TransactionController::class, 'issue'])->middleware('permission:transactions.issue');
-                Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel'])->middleware('permission:transactions.cancel');
             });
         });
 
@@ -124,9 +123,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/fee/config', [FeeLedgerController::class, 'feeConfig']);
         });
 
-        //view transactions (admin & mitra)
-        Route::middleware('role.permission:admin,mitra')->group(function () {
-            Route::get('/transactions/{trx_code}', [TransactionController::class, 'show'])->middleware('permission:transactions.view');
+        // Transactions (admin & mitra)
+        Route::middleware('role.permission:admin,mitra')->prefix('transactions')->group(function () {
+            Route::get('/{trx_code}', [TransactionController::class, 'show'])->middleware('permission:transactions.view');
+            Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel'])->middleware('permission:transactions.cancel');
+        });
+
+        // Reports (admin & mitra)
+        Route::middleware('role.permission:admin,mitra')->prefix('reports')->group(function () {
+            Route::get('/transactions', [ReportController::class, 'transactions'])->middleware('permission:reports.transactions');
         });
     });
 

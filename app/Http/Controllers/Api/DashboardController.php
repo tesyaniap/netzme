@@ -29,13 +29,22 @@ class DashboardController extends Controller
             'total_transactions_month' => Transaction::whereBetween('created_at', [$startOfMonth, $endOfMonth])->count(),
             'total_deposit' => Topup::where('status', 'success')->sum('amount'),
             'total_fee_mitra' => DB::table('transaction_fees')->sum('fee_amount'),
-            'chart_transactions' => Transaction::selectRaw('DATE(created_at) as date, COUNT(*) as total')
-                ->where('created_at', '>=', now()->subDays(7))
-                ->groupBy('date')
-                ->orderBy('date')
-                ->get(),
+            'chart_transactions' => Transaction::with(['mitra'])
+                ->latest('id')
+                ->limit(10)
+                ->get()
+                ->map(function($t) {
+                    return [
+                        'id' => $t->id,
+                        'trx_code' => $t->trx_code,
+                        'route' => $t->route ?? '-',
+                        'amount' => $t->amount,
+                        'status' => $t->status,
+                        'created_at' => $t->created_at ?? now(),
+                    ];
+                }),
             'recent_activities' => collect()
-                ->merge(Transaction::with(['mitra', 'user'])->latest()->limit(10)->get()->map(function($t) {
+                ->merge(Transaction::with(['mitra', 'user'])->latest('id')->limit(10)->get()->map(function($t) {
                     return [
                         'id' => 'trx-' . $t->id,
                         'type' => 'transaction',
@@ -43,10 +52,10 @@ class DashboardController extends Controller
                         'route' => $t->route,
                         'amount' => $t->amount,
                         'status' => $t->status,
-                        'created_at' => $t->created_at,
+                        'created_at' => $t->created_at ?? now(),
                     ];
                 }))
-                ->merge(Topup::with(['mitra'])->latest()->limit(10)->get()->map(function($t) {
+                ->merge(Topup::with(['mitra'])->latest('id')->limit(10)->get()->map(function($t) {
                     return [
                         'id' => 'topup-' . $t->id,
                         'type' => 'topup',

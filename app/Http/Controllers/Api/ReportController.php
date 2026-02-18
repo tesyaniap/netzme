@@ -50,17 +50,18 @@ class ReportController extends Controller
             }
         }
 
-        $transactions = $query->latest('id')->get();
+        $transactions = $query->latest('id')->paginate($request->per_page ?? 5);
 
         if ($transactions->isEmpty()) {
-            return $this->successResponse([], 'Transaction report retrieved');
+            return response()->json([
+                'status' => true,
+                'message' => 'Transaction report retrieved',
+                'data' => [],
+                'current_page' => 1,
+                'last_page' => 1,
+                'total' => 0
+            ]);
         }
-
-        $summary = [
-            'total_transactions' => $transactions->count(),
-            'total_amount' => $transactions->sum('amount'),
-            'by_status' => $transactions->groupBy('status')->map->count(),
-        ];
 
         // Format data untuk frontend
         $formattedData = $transactions->map(function($transaction) {
@@ -76,7 +77,14 @@ class ReportController extends Controller
             ];
         });
 
-        return $this->successResponse($formattedData, 'Transaction report retrieved');
+        return response()->json([
+            'status' => true,
+            'message' => 'Transaction report retrieved',
+            'data' => $formattedData,
+            'current_page' => $transactions->currentPage(),
+            'last_page' => $transactions->lastPage(),
+            'total' => $transactions->total()
+        ]);
     }
 
     public function topups(Request $request)
@@ -105,7 +113,7 @@ class ReportController extends Controller
             $query->where('status', $request->status);
         }
 
-        $topups = $query->latest()->paginate(50);
+        $topups = $query->latest()->paginate($request->per_page ?? 5);
 
         $summary = [
             'total_topups' => $query->count(),
@@ -150,7 +158,7 @@ class ReportController extends Controller
             });
         }
 
-        $fees = $query->latest('id')->paginate(50);
+        $fees = $query->latest('id')->paginate($request->per_page ?? 5);
 
         $summary = [
             'total_fee' => $query->sum('fee_amount'),

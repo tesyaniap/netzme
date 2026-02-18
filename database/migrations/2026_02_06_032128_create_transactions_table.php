@@ -21,7 +21,7 @@ return new class extends Migration
             $table->date('travel_date');
             $table->enum('payment_type', ['deposit', 'direct']);
             $table->decimal('amount', 15, 2);
-            $table->enum('status', ['pending', 'paid', 'issued', 'failed']);
+            $table->enum('status', ['pending', 'paid', 'issued', 'failed', 'cancelled']);
             $table->json('provider_response');
             $table->timestamp('created_at')->useCurrent();
         });

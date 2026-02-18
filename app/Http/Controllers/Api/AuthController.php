@@ -23,17 +23,21 @@ class AuthController extends Controller
             ->where('email', $request->email)
             ->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return $this->errorResponse('Invalid credentials', null, 401);
+        if (!$user) {
+            return $this->errorResponse('Email tidak ditemukan', null, 404);
+        }
+
+        if (!Hash::check($request->password, $user->password)) {
+            return $this->errorResponse('Password salah', null, 401);
         }
 
         if ($user->status !== 'active') {
-            return $this->errorResponse('Account is inactive', null, 403);
+            return $this->errorResponse('Akun Anda tidak aktif. Silakan hubungi administrator', null, 403);
         }
 
         // Validasi role
         if (!$user->hasAnyRole(['admin', 'mitra'])) {
-            return $this->errorResponse('Unauthorized role', null, 403);
+            return $this->errorResponse('Anda tidak memiliki akses ke sistem ini', null, 403);
         }
 
         $token = $user->createToken('auth_token')->accessToken;
@@ -42,7 +46,7 @@ class AuthController extends Controller
             'user' => new UserResource($user),
             'access_token' => $token,
             'token_type' => 'Bearer'
-        ], 'Login successful');
+        ], 'Login berhasil');
     }
 
     /**
