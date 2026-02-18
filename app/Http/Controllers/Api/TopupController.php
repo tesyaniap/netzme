@@ -15,6 +15,8 @@ class TopupController extends Controller
 
     public function index(Request $request)
     {
+        $perPage = $request->input('per_page', 10);
+        
         $query = Topup::with(['mitra', 'approver']);
 
         // Mitra hanya lihat topup sendiri
@@ -22,7 +24,7 @@ class TopupController extends Controller
             $query->where('mitra_id', $request->user()->mitra_id);
         }
 
-        $topups = $query->latest()->paginate(15);
+        $topups = $query->latest()->paginate($perPage);
 
         return $this->successResponse($topups, 'Topups retrieved successfully');
     }

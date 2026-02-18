@@ -11,6 +11,10 @@ use App\Models\Mitra;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use TCPDF;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
 
 class ReportController extends Controller
 {
@@ -203,8 +207,128 @@ class ReportController extends Controller
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
             'mitra_id' => 'nullable|exists:mitra,id',
+            'format' => 'required|in:pdf,excel',
         ]);
 
+        $format = $request->format ?? 'pdf';
+
+        if ($format === 'excel') {
+            return $this->exportExcel($request, $type);
+        }
+
+        return $this->exportPdf($request, $type);
+    }
+
+    private function exportExcel(Request $request, $type)
+    {
+        $data = $this->getReportData($request, $type);
+        
+        $export = new class($data, $type) implements FromCollection, WithHeadings, WithMapping {
+            private $data;
+            private $type;
+            
+            public function __construct($data, $type) {
+                $this->data = $data;
+                $this->type = $type;
+            }
+            
+            public function collection() {
+                return $this->data;
+            }
+            
+            public function headings(): array {
+                switch($this->type) {
+                    case 'transactions':
+                        return ['Tanggal', 'Kode', 'Mitra', 'Jumlah', 'Fee', 'Status'];
+                    case 'topups':
+                        return ['Tanggal', 'Mitra', 'Jumlah', 'Status', 'Disetujui'];
+                    case 'fees':
+                        return ['Mitra', 'Transaksi', 'Tipe', 'Nilai', 'Jumlah'];
+                    case 'balances':
+                        return ['Mitra', 'Saldo', 'Total Transaksi'];
+                    default:
+                        return [];
+                }
+            }
+            
+            public function map($row): array {
+                switch($this->type) {
+                    case 'transactions':
+                        return [
+                            $row->created_at->format('d/m/Y H:i'),
+                            $row->trx_code,
+                            $row->mitra->name ?? '-',
+                            $row->amount,
+                            $row->fee->fee_amount ?? 0,
+                            $row->status
+                        ];
+                    case 'topups':
+                        return [
+                            $row->created_at->format('d/m/Y H:i'),
+                            $row->mitra->name ?? '-',
+                            $row->amount,
+                            $row->status,
+                            $row->approver->name ?? '-'
+                        ];
+                    case 'fees':
+                        return [
+                            $row->mitra->name ?? '-',
+                            $row->transaction->trx_code ?? '-',
+                            $row->fee_type,
+                            $row->fee_value . '%',
+                            $row->fee_amount
+                        ];
+                    case 'balances':
+                        return [
+                            $row->name,
+                            $row->balance,
+                            $row->transactions_count
+                        ];
+                    default:
+                        return [];
+                }
+            }
+        };
+        
+        return Excel::download($export, "laporan-{$type}-" . now()->format('YmdHis') . '.xlsx');
+    }
+
+    private function getReportData(Request $request, $type)
+    {
+        switch ($type) {
+            case 'transactions':
+                $query = Transaction::with(['mitra', 'fee']);
+                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
+                if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
+                if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
+                return $query->latest('id')->get();
+                
+            case 'topups':
+                $query = Topup::with(['mitra', 'approver']);
+                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
+                if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
+                if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
+                return $query->latest()->get();
+                
+            case 'fees':
+                $query = TransactionFee::with(['mitra', 'transaction']);
+                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
+                if ($request->start_date) $query->whereHas('transaction', fn($q) => $q->whereDate('created_at', '>=', $request->start_date));
+                if ($request->end_date) $query->whereHas('transaction', fn($q) => $q->whereDate('created_at', '<=', $request->end_date));
+                return $query->latest('id')->get();
+                
+            case 'balances':
+                return Mitra::select('id', 'name', 'balance')->withCount('transactions')->get();
+                
+            default:
+                return collect([]);
+        }
+    }
+
+    private function exportPdf(Request $request, $type)
+    {
+        $data = $this->getReportData($request, $type);
+        
         $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8');
         $pdf->SetCreator('Bridge System H2H');
         $pdf->SetMargins(10, 10, 10);
@@ -214,12 +338,6 @@ class ReportController extends Controller
 
         switch ($type) {
             case 'transactions':
-                $query = Transaction::with(['mitra', 'fee']);
-                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
-                if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
-                if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
-                $data = $query->latest('id')->get();
-                
                 $pdf->SetFont('helvetica', 'B', 14);
                 $pdf->Cell(0, 10, 'Laporan Transaksi', 0, 1, 'C');
                 $pdf->SetFont('helvetica', '', 9);
@@ -238,12 +356,6 @@ class ReportController extends Controller
                 break;
 
             case 'topups':
-                $query = Topup::with(['mitra', 'approver']);
-                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
-                if ($request->start_date) $query->whereDate('created_at', '>=', $request->start_date);
-                if ($request->end_date) $query->whereDate('created_at', '<=', $request->end_date);
-                $data = $query->latest()->get();
-                
                 $pdf->SetFont('helvetica', 'B', 14);
                 $pdf->Cell(0, 10, 'Laporan Topup', 0, 1, 'C');
                 $pdf->SetFont('helvetica', '', 9);
@@ -261,12 +373,6 @@ class ReportController extends Controller
                 break;
 
             case 'fees':
-                $query = TransactionFee::with(['mitra', 'transaction']);
-                if ($request->mitra_id) $query->where('mitra_id', $request->mitra_id);
-                if ($request->start_date) $query->whereHas('transaction', fn($q) => $q->whereDate('created_at', '>=', $request->start_date));
-                if ($request->end_date) $query->whereHas('transaction', fn($q) => $q->whereDate('created_at', '<=', $request->end_date));
-                $data = $query->latest('id')->get();
-                
                 $pdf->SetFont('helvetica', 'B', 14);
                 $pdf->Cell(0, 10, 'Laporan Fee', 0, 1, 'C');
                 $pdf->SetFont('helvetica', '', 9);
@@ -284,8 +390,6 @@ class ReportController extends Controller
                 break;
 
             case 'balances':
-                $data = Mitra::select('id', 'name', 'balance')->withCount('transactions')->get();
-                
                 $pdf->SetFont('helvetica', 'B', 14);
                 $pdf->Cell(0, 10, 'Laporan Saldo', 0, 1, 'C');
                 $pdf->SetFont('helvetica', '', 9);
@@ -305,4 +409,3 @@ class ReportController extends Controller
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'attachment; filename="laporan-' . $type . '-' . now()->format('YmdHis') . '.pdf"');
     }
-}
