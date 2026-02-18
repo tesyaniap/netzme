@@ -25,11 +25,7 @@ class ReportController extends Controller
             'mitra_id' => 'nullable|exists:mitra,id',
         ]);
 
-<<<<<<< HEAD
-        $query = Transaction::with(['mitra', 'transactionFee', 'user']);
-=======
         $query = Transaction::with(['mitra', 'fee', 'user']);
->>>>>>> e10e88d012580f5ef23d449859a8d54964230450
 
         if ($request->mitra_id) {
             $query->where('mitra_id', $request->mitra_id);
@@ -50,11 +46,7 @@ class ReportController extends Controller
             }
         }
 
-<<<<<<< HEAD
-        $transactions = $query->latest()->get();
-=======
         $transactions = $query->latest('id')->get();
->>>>>>> e10e88d012580f5ef23d449859a8d54964230450
 
         if ($transactions->isEmpty()) {
             return $this->successResponse([], 'Transaction report retrieved');
@@ -70,20 +62,12 @@ class ReportController extends Controller
         $formattedData = $transactions->map(function($transaction) {
             return [
                 'id' => $transaction->id,
-<<<<<<< HEAD
-                'tanggal' => $transaction->created_at,
-                'mitra' => $transaction->mitra->name ?? '-',
-                'jenis_transaksi' => 'Pembelian Tiket',
-                'jumlah' => $transaction->amount ?? 0,
-                'fee' => $transaction->transactionFee->fee_amount ?? 0,
-=======
                 'trx_code' => $transaction->trx_code,
                 'tanggal' => $transaction->created_at ?? now(),
                 'mitra' => $transaction->mitra->name ?? '-',
                 'jenis_transaksi' => 'Pembelian Tiket',
                 'jumlah' => $transaction->amount ?? 0,
                 'fee' => $transaction->fee->fee_amount ?? 0,
->>>>>>> e10e88d012580f5ef23d449859a8d54964230450
                 'status' => $transaction->status ?? '-',
             ];
         });

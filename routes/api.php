@@ -59,23 +59,14 @@ Route::prefix('v1')->group(function () {
             
             // Mitra Management
             Route::prefix('mitra')->group(function () {
-<<<<<<< HEAD
                 Route::post('/register', [MitraController::class, 'register'])->middleware('permission:mitra.create');
                 Route::get('/', [MitraController::class, 'index'])->middleware('permission:mitra.view');
                 Route::get('/{id}', [MitraController::class, 'show'])->middleware('permission:mitra.view');
                 Route::post('/{id}/approve', [MitraController::class, 'approve'])->middleware('permission:mitra.approve');
                 Route::post('/{id}/reject', [MitraController::class, 'reject'])->middleware('permission:mitra.reject');
+                Route::post('/{id}/deactivate', [MitraController::class, 'deactivate'])->middleware('permission:mitra.deactivate');
+                Route::post('/{id}/reactivate', [MitraController::class, 'reactivate'])->middleware('permission:mitra.reactivate');
                 Route::put('/{id}/fee', [MitraController::class, 'updateFee'])->middleware('permission:mitra.fee');
-=======
-                Route::post('/register', [MitraController::class, 'register']);
-                Route::get('/', [MitraController::class, 'index']);
-                Route::get('/{id}', [MitraController::class, 'show']);
-                Route::post('/{id}/approve', [MitraController::class, 'approve']);
-                Route::post('/{id}/reject', [MitraController::class, 'reject']);
-                Route::post('/{id}/deactivate', [MitraController::class, 'deactivate']);
-                Route::post('/{id}/reactivate', [MitraController::class, 'reactivate']);
-                Route::put('/{id}/fee', [MitraController::class, 'updateFee']);
->>>>>>> e10e88d012580f5ef23d449859a8d54964230450
             });
 
             // Topup Management (Admin)
