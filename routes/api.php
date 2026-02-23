@@ -132,6 +132,9 @@ Route::prefix('v1')->group(function () {
         // Reports (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('reports')->group(function () {
             Route::get('/transactions', [ReportController::class, 'transactions'])->middleware('permission:reports.transactions');
+            Route::get('/topups', [ReportController::class, 'topups'])->middleware('permission:reports.topups');
+            Route::get('/fees', [ReportController::class, 'fees'])->middleware('permission:reports.fees');
+            Route::get('/balances', [ReportController::class, 'balances'])->middleware('permission:reports.balances');
         });
     });
 
