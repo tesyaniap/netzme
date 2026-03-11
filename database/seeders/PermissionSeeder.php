@@ -36,6 +36,27 @@ class PermissionSeeder extends Seeder
             // Reports (Admin)
             'reports.transactions', 'reports.topups', 'reports.fees', 'reports.balances',
             
+            // Routes (Admin)
+            'routes.view', 'routes.create', 'routes.update', 'routes.delete',
+            
+            // Cities (Admin)
+            'cities.view', 'cities.create', 'cities.update', 'cities.delete',
+            
+            // Terminals (Admin)
+            'terminals.view', 'terminals.create', 'terminals.update', 'terminals.delete',
+            
+            // Schedules (Admin)
+            'schedules.view', 'schedules.create', 'schedules.update', 'schedules.delete',
+            
+            // Vehicles (Admin)
+            'vehicles.view', 'vehicles.create', 'vehicles.update', 'vehicles.delete', 'vehicles.bulk-create',
+            
+            // Seats (Admin)
+            'seats.view', 'seats.create', 'seats.update', 'seats.delete', 'seats.generate',
+            
+            // Tickets
+            'tickets.view', 'tickets.reschedule', 'tickets.cancel',
+            
             // Dashboard
             'dashboard.admin', 'dashboard.partner',
         ];
@@ -63,6 +84,13 @@ class PermissionSeeder extends Seeder
                 'transactions.view', 'transactions.cancel',
                 'balance.view', 'balance.histories', 'fee-ledgers.view',
                 'reports.transactions', 'reports.topups', 'reports.fees', 'reports.balances',
+                'routes.view', 'routes.create', 'routes.update', 'routes.delete',
+                'cities.view', 'cities.create', 'cities.update', 'cities.delete',
+                'terminals.view', 'terminals.create', 'terminals.update', 'terminals.delete',
+                'schedules.view', 'schedules.create', 'schedules.update', 'schedules.delete',
+                'vehicles.view', 'vehicles.create', 'vehicles.update', 'vehicles.delete', 'vehicles.bulk-create',
+                'seats.view', 'seats.create', 'seats.update', 'seats.delete', 'seats.generate',
+                'tickets.view', 'tickets.reschedule', 'tickets.cancel',
                 'dashboard.admin',
             ]);
         }
@@ -74,6 +102,13 @@ class PermissionSeeder extends Seeder
                 'transactions.book', 'transactions.pay', 'transactions.issue', 'transactions.cancel',
                 'transactions.seat-map',
                 'balance.view', 'balance.histories', 'fee-ledgers.view',
+                'routes.view',
+                'cities.view',
+                'terminals.view',
+                'schedules.view',
+                'vehicles.view',
+                'seats.view',
+                'tickets.view', 'tickets.reschedule', 'tickets.cancel',
                 'dashboard.partner',
             ]);
         }

@@ -16,10 +16,26 @@ class RolePermission
             ], 401);
         }
 
-        if (!$request->user()->hasAnyRole($roles)) {
+        $user = $request->user();
+        $userRoles = $user->getRoleNames();
+        $hasRole = $user->hasAnyRole($roles);
+        
+        // Debug log
+        \Log::info('RolePermission Debug', [
+            'required_roles' => $roles,
+            'user_roles' => $userRoles,
+            'has_role' => $hasRole
+        ]);
+
+        if (!$hasRole) {
             return response()->json([
                 'status' => false,
-                'message' => 'Maaf, Anda tidak memiliki akses untuk halaman ini'
+                'message' => 'Maaf, Anda tidak memiliki akses untuk halaman ini',
+                'debug' => [
+                    'required_roles' => $roles,
+                    'user_roles' => $userRoles,
+                    'has_role' => $hasRole
+                ]
             ], 403);
         }
 

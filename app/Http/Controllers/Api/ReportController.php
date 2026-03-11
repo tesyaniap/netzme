@@ -15,6 +15,10 @@ class ReportController extends Controller
 {
     use ApiResponse;
 
+    /**
+     * Get Transaction Report
+      * Filter by date range, status, mitra
+      */
     public function transactions(Request $request)
     {
         $request->validate([
@@ -82,6 +86,10 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * Get Topup Report
+     * Filter by date range, status, mitra
+     */
     public function topups(Request $request)
     {
         $request->validate([
@@ -120,6 +128,10 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * Get Fee Report
+     * Filter by date range, mitra
+     */
     public function fees(Request $request)
     {
         $request->validate([
@@ -157,6 +169,10 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * Get Balance Report
+     * Filter by mitra
+     */
     public function balances(Request $request)
     {
         $mitras = Mitra::select('id', 'name', 'balance')

@@ -11,6 +11,13 @@ use App\Http\Controllers\Api\FeeLedgerController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\CallbackController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\VehicleController;
+use App\Http\Controllers\Api\RouteController;
+use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\SeatController;
+use App\Http\Controllers\Api\TicketController;
+use App\Http\Controllers\Api\CityController;
+use App\Http\Controllers\Api\TerminalController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -69,6 +76,60 @@ Route::prefix('v1')->group(function () {
                 Route::put('/{id}/fee', [MitraController::class, 'updateFee'])->middleware('permission:mitra.fee');
             });
 
+            // Vehicle Management (Admin only - no specific permissions yet)
+            Route::prefix('vehicles')->group(function () {
+                Route::post('/', [VehicleController::class, 'store']);
+                Route::post('/bulk', [VehicleController::class, 'bulkStore']);
+                Route::put('/{id}', [VehicleController::class, 'update']);
+                Route::delete('/{id}', [VehicleController::class, 'destroy']);
+            });
+
+            // Route Management (Admin only)
+            Route::prefix('routes')->group(function () {
+                Route::get('/', [RouteController::class, 'index']);
+                Route::post('/', [RouteController::class, 'store']);
+                Route::get('/{id}', [RouteController::class, 'show']);
+                Route::put('/{id}', [RouteController::class, 'update']);
+                Route::delete('/{id}', [RouteController::class, 'destroy']);
+            });
+
+            // City Management (Admin only)
+            Route::prefix('cities')->group(function () {
+                Route::get('/', [CityController::class, 'index']);
+                Route::post('/', [CityController::class, 'store']);
+                Route::get('/{id}', [CityController::class, 'show']);
+                Route::put('/{id}', [CityController::class, 'update']);
+                Route::delete('/{id}', [CityController::class, 'destroy']);
+            });
+
+            // Terminal Management (Admin only)
+            Route::prefix('terminals')->group(function () {
+                Route::get('/', [TerminalController::class, 'index']);
+                Route::post('/', [TerminalController::class, 'store']);
+                Route::get('/{id}', [TerminalController::class, 'show']);
+                Route::put('/{id}', [TerminalController::class, 'update']);
+                Route::delete('/{id}', [TerminalController::class, 'destroy']);
+            });
+
+            // Schedule Management (Admin only)
+            Route::prefix('schedules')->group(function () {
+                Route::get('/', [ScheduleController::class, 'index']);
+                Route::post('/', [ScheduleController::class, 'store']);
+                Route::get('/{id}', [ScheduleController::class, 'show']);
+                Route::put('/{id}', [ScheduleController::class, 'update']);
+                Route::delete('/{id}', [ScheduleController::class, 'destroy']);
+            });
+
+            // Seat Management (Admin only)
+            Route::prefix('seats')->group(function () {
+                Route::get('/', [SeatController::class, 'index']);
+                Route::post('/', [SeatController::class, 'store']);
+                Route::post('/generate', [SeatController::class, 'generateSeats']);
+                Route::get('/{id}', [SeatController::class, 'show']);
+                Route::put('/{id}', [SeatController::class, 'update']);
+                Route::delete('/{id}', [SeatController::class, 'destroy']);
+            });
+
             // Topup Management (Admin)
             Route::prefix('topups')->group(function () {
                 Route::post('/{id}/approve', [TopupController::class, 'approve'])->middleware('permission:topups.approve');
@@ -121,12 +182,24 @@ Route::prefix('v1')->group(function () {
             Route::get('/balance/histories', [BalanceController::class, 'histories'])->middleware('permission:balance.histories');
             Route::get('/fee/ledgers', [FeeLedgerController::class, 'index'])->middleware('permission:fee-ledgers.view');
             Route::get('/fee/config', [FeeLedgerController::class, 'feeConfig']);
+            
+            // Vehicle Management (admin & mitra)
+            Route::prefix('vehicles')->group(function () {
+                Route::get('/', [VehicleController::class, 'index']);
+                Route::get('/{id}', [VehicleController::class, 'show']);
+            });
         });
 
         // Transactions (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('transactions')->group(function () {
             Route::get('/{trx_code}', [TransactionController::class, 'show'])->middleware('permission:transactions.view');
             Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel'])->middleware('permission:transactions.cancel');
+        });
+
+        // Tickets (admin & mitra)
+        Route::middleware('role.permission:admin,mitra')->prefix('tickets')->group(function () {
+            Route::get('/{id}', [TicketController::class, 'show']);
+            Route::post('/{id}/reschedule', [TicketController::class, 'reschedule']);
         });
 
         // Reports (admin & mitra)

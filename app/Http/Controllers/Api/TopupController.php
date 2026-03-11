@@ -13,6 +13,10 @@ class TopupController extends Controller
 {
     use ApiResponse;
 
+    /**
+     * Get List Topup
+     * Filter by mitra, status
+     */
     public function index(Request $request)
     {
         $perPage = $request->input('per_page', 10);
@@ -29,6 +33,9 @@ class TopupController extends Controller
         return $this->successResponse($topups, 'Topups retrieved successfully');
     }
 
+    /**
+     * Create Topup Request
+     */
     public function store(Request $request)
     {
         $request->validate([
@@ -61,6 +68,9 @@ class TopupController extends Controller
         return $this->successResponse('Topup request created successfully', $topup, 201);
     }
 
+    /**
+     * Get Detail Topup
+     */
     public function show($id)
     {
         $topup = Topup::with(['mitra', 'approver'])->findOrFail($id);
@@ -73,6 +83,9 @@ class TopupController extends Controller
         return $this->successResponse('Topup retrieved successfully', $topup);
     }
 
+    /**
+     * Approve Topup
+     */
     public function approve(Request $request, $id)
     {
         $topup = Topup::findOrFail($id);
@@ -114,6 +127,9 @@ class TopupController extends Controller
         }
     }
 
+    /**
+     * Reject Topup
+     */
     public function reject(Request $request, $id)
     {
         $request->validate([

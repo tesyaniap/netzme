@@ -3,100 +3,323 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\TransactionResource;
 use App\Http\Traits\ApiResponse;
 use App\Models\Transaction;
 use App\Models\TransactionPassenger;
 use App\Models\TransactionFee;
 use App\Models\PartnerFeeLedger;
 use App\Models\Mitra;
+use App\Models\Schedule;
+use App\Models\Seat;
+use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Illuminate\support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class TransactionController extends Controller
 {
     use ApiResponse;
 
     /**
-     * Mrncari transaksi yang tersedia
+     * Search available schedules
      */
     public function search(Request $request)
     {
         $request->validate([
-            'origin' => 'required|string',
-            'destination' => 'required|string',
-            'travel_date' => 'required|date',
+            'origin' => 'required',
+            'destination' => 'required', 
+            'travel_date' => 'nullable|date',
         ]);
 
-        $schedules = [
-            [
-                'provider_code' => 'BUS001',
-                'route' => $request->origin . ' - ' . $request->destination,
-                'departure_time' => '08:00',
-                'price' => 150000,
-                'available_seats' => 20
-            ]
-        ];
-        return $this->successResponse('Bus schedules retrieved', $schedules);
+        // Get all schedules with relations
+        $query = Schedule::with(['vehicle.partner', 'route.originCity', 'route.destinationCity']);
+        
+        // Filter berdasarkan travel_date jika ada
+        if ($request->travel_date) {
+            $query->whereDate('travel_date', $request->travel_date);
+        }
+        
+        // Filter berdasarkan route
+        if (is_numeric($request->origin) && is_numeric($request->destination)) {
+            // Jika origin dan destination adalah route_id yang sama
+            if ($request->origin == $request->destination) {
+                $query->where('route_id', $request->origin);
+            } else {
+                // Jika berbeda, cari route yang sesuai
+                $query->whereHas('route', function ($q) use ($request) {
+                    $q->where('id', $request->origin)
+                      ->orWhere('id', $request->destination);
+                });
+            }
+        } else {
+            // Filter berdasarkan nama kota
+            $query->whereHas('route.originCity', function ($q) use ($request) {
+                if (is_numeric($request->origin)) {
+                    $q->where('id', $request->origin);
+                } else {
+                    $q->where('name', 'LIKE', '%' . $request->origin . '%');
+                }
+            })->whereHas('route.destinationCity', function ($q) use ($request) {
+                if (is_numeric($request->destination)) {
+                    $q->where('id', $request->destination);
+                } else {
+                    $q->where('name', 'LIKE', '%' . $request->destination . '%');
+                }
+            });
+        }
+        
+        $schedules = $query->get();
+        
+        if ($schedules->isEmpty()) {
+            // Debug info untuk development
+            $allSchedules = Schedule::with(['vehicle.partner', 'route.originCity', 'route.destinationCity'])->get();
+            $allRoutes = \App\Models\Route::with(['originCity', 'destinationCity'])->get();
+            
+            return $this->errorResponse('No schedules available for the selected route', [
+                'search_params' => [
+                    'origin' => $request->origin,
+                    'destination' => $request->destination,
+                    'travel_date' => $request->travel_date
+                ],
+                'debug_info' => [
+                    'total_schedules_in_db' => $allSchedules->count(),
+                    'total_routes_in_db' => $allRoutes->count(),
+                    'available_routes' => $allRoutes->map(function($route) {
+                        return [
+                            'id' => $route->id,
+                            'route' => ($route->originCity ? $route->originCity->name : 'Unknown') . ' → ' . ($route->destinationCity ? $route->destinationCity->name : 'Unknown')
+                        ];
+                    }),
+                    'available_schedules' => $allSchedules->map(function($schedule) {
+                        return [
+                            'id' => $schedule->id,
+                            'route_id' => $schedule->route_id,
+                            'travel_date' => $schedule->travel_date,
+                            'route' => $schedule->route ? 
+                                ($schedule->route->originCity ? $schedule->route->originCity->name : 'Unknown') . ' → ' . 
+                                ($schedule->route->destinationCity ? $schedule->route->destinationCity->name : 'Unknown') : null
+                        ];
+                    })
+                ]
+            ], 404);
+        }
+        
+        return $this->successResponse('Schedules found', [
+            'total_schedules' => $schedules->count(),
+            'search_params' => [
+                'origin' => $request->origin,
+                'destination' => $request->destination,
+                'travel_date' => $request->travel_date
+            ],
+            'schedules' => $schedules
+        ]);
     }
 
     /**
-     * Seat-Map Bus transaksi
+     * Get seat map for schedule
      */
-
     public function seatMap(Request $request)
     {
         $request->validate([
-            'provider_code' => 'required|string',
+            'schedule_id' => 'required|exists:schedules,id',
+            'travel_date' => 'required|date',
         ]);
 
-        $seatMap = [
-            'seats' => [
-                ['number' => 'A1', 'status' => 'available'],
-                ['number' => 'A2', 'status' => 'booked'],
-            ]                
-        ];
-        return $this->successResponse('Seat map retrieved', $seatMap);
+        $schedule = Schedule::with(['vehicle.seats', 'route.originCity', 'route.destinationCity', 'route.departureTerminal', 'route.arrivalTerminal'])->find($request->schedule_id);
+        
+        if (!$schedule) {
+            return $this->errorResponse('Schedule not found', [], 404);
+        }
+
+        if (!$schedule->vehicle) {
+            return $this->errorResponse('Vehicle not found for this schedule', [], 404);
+        }
+
+        $seats = $schedule->vehicle->seats()->orderBy('row')->orderBy('column')->get();
+        
+        if ($seats->isEmpty()) {
+            return $this->errorResponse('No seats configured for this vehicle', [
+                'suggestion' => 'Please generate seats for vehicle ID: ' . $schedule->vehicle_id
+            ], 404);
+        }
+        
+        // Get booked seats for this schedule and date
+        $bookedSeatIds = Ticket::whereHas('transaction', function ($query) use ($request) {
+                $query->where('travel_date', $request->travel_date)
+                      ->whereIn('status', ['pending', 'paid', 'issued']);
+            })
+            ->where('schedule_id', $request->schedule_id)
+            ->pluck('seat_id')
+            ->toArray();
+
+        // Map seats with availability status
+        $seatMap = $seats->map(function ($seat) use ($bookedSeatIds) {
+            return [
+                'id' => $seat->id,
+                'seat_number' => $seat->seat_number,
+                'row' => $seat->row,
+                'column' => $seat->column,
+                'status' => in_array($seat->id, $bookedSeatIds) ? 'booked' : 'available'
+            ];
+        });
+
+        // Group seats by row for easier frontend rendering
+        $seatsByRow = $seatMap->groupBy('row');
+
+        return $this->successResponse('Seat map retrieved', [
+            'schedule' => [
+                'id' => $schedule->id,
+                'departure_time' => $schedule->departure_time,
+                'arrival_time' => $schedule->arrival_time,
+                'price' => $schedule->price,
+                'travel_date' => $schedule->travel_date,
+                'route' => [
+                    'origin' => $schedule->route->originCity ? $schedule->route->originCity->name : 'Unknown',
+                    'destination' => $schedule->route->destinationCity ? $schedule->route->destinationCity->name : 'Unknown',
+                    'departure_terminal' => $schedule->route->departureTerminal ? $schedule->route->departureTerminal->name : 'Unknown',
+                    'arrival_terminal' => $schedule->route->arrivalTerminal ? $schedule->route->arrivalTerminal->name : 'Unknown'
+                ],
+                'vehicle' => [
+                    'name' => $schedule->vehicle->name,
+                    'plate_number' => $schedule->vehicle->plate_number,
+                    'seat_capacity' => $schedule->vehicle->seat_capacity,
+                    'seat_layout' => $schedule->vehicle->seat_layout
+                ]
+            ],
+            'seat_summary' => [
+                'total_seats' => $seats->count(),
+                'available_seats' => $seatMap->where('status', 'available')->count(),
+                'booked_seats' => $seatMap->where('status', 'booked')->count()
+            ],
+            'seats' => $seatMap,
+            'seats_by_row' => $seatsByRow,
+            'travel_date' => $request->travel_date
+        ]);
     }
 
     /**
-     * Book Transaction (seat - map)
-    **/
+     * Book tickets
+     */
     public function book(Request $request)
     {
         $request->validate([
-            'provider_code' => 'required|string',
+            'schedule_id' => 'required|exists:schedules,id',
             'travel_date' => 'required|date',
-            'seats' => 'required|array',
-            'passengers' => 'required|array',
-            'passengers.*.name' => 'required|string',
-            'passengers.*.identity_number' => 'required|string',
+            'seats' => 'required|array|min:1',
+            'seats.*' => 'required|integer|exists:seats,id',
+            'customer_name' => 'required|string|max:255',
+            'customer_phone' => 'required|string|max:20',
+            'customer_email' => 'nullable|email|max:255',
+            'passengers' => 'required|array|min:1',
+            'passengers.*.name' => 'required|string|max:255',
+            'passengers.*.identity_number' => 'required|string|max:50',
         ]);
+
+        // Validasi jumlah seats dan passengers harus sama
+        if (count($request->seats) !== count($request->passengers)) {
+            return $this->errorResponse('Number of seats must match number of passengers', [], 422);
+        }
 
         DB::beginTransaction();
         try {
-            $trxCode = 'TRX' . now()->format('YmdHis');
-            $amount = count($request->seats) * 150000;
+            $schedule = Schedule::with(['vehicle.partner', 'route'])->find($request->schedule_id);
+            
+            if (!$schedule) {
+                return $this->errorResponse('Schedule not found', [], 404);
+            }
 
+            // Optional: Validasi travel_date dengan schedule travel_date
+            // Jika schedule memiliki travel_date spesifik, harus match
+            // Jika schedule tidak memiliki travel_date, berarti template harian
+            if ($schedule->travel_date) {
+                $scheduleDate = \Carbon\Carbon::parse($schedule->travel_date)->format('Y-m-d');
+                $requestDate = \Carbon\Carbon::parse($request->travel_date)->format('Y-m-d');
+                
+                if ($scheduleDate != $requestDate) {
+                    return $this->errorResponse('Travel date does not match schedule date', [
+                        'schedule_date' => $scheduleDate,
+                        'requested_date' => $requestDate,
+                        'message' => 'This schedule is only available for ' . $scheduleDate
+                    ], 422);
+                }
+            }
+            // Jika schedule->travel_date null, berarti schedule template yang bisa digunakan untuk tanggal manapun
+
+            // Validasi seats belong to the same vehicle as schedule
+            $validSeats = Seat::whereIn('id', $request->seats)
+                             ->where('vehicle_id', $schedule->vehicle_id)
+                             ->get();
+            
+            if ($validSeats->count() !== count($request->seats)) {
+                return $this->errorResponse('Some seats do not belong to this vehicle', [], 422);
+            }
+            
+            // Check seat availability untuk tanggal ini
+            $bookedSeats = Ticket::whereHas('transaction', function ($query) use ($request) {
+                    $query->where('travel_date', $request->travel_date)
+                          ->whereIn('status', ['pending', 'paid', 'issued']);
+                })
+                ->where('schedule_id', $request->schedule_id)
+                ->whereIn('seat_id', $request->seats)
+                ->exists();
+
+            if ($bookedSeats) {
+                return $this->errorResponse('Some seats are already booked for this date', [], 400);
+            }
+
+            // Generate transaction code
+            $trxCode = 'TRX' . now()->format('YmdHis') . strtoupper(Str::random(4));
+            
+            $passengerCount = count($request->passengers);
+            $basePrice = $schedule->price;
+            $adminFee = 5000; // Fixed admin fee
+            $serviceFee = 2500; // Fixed service fee
+            $totalAmount = ($basePrice * $passengerCount) + $adminFee + $serviceFee;
+
+            // Create transaction
             $transaction = Transaction::create([
                 'trx_code' => $trxCode,
-                'mitra_id' => $request->user()->mitra_id,   
+                'mitra_id' => $request->user()->mitra_id,
                 'user_id' => $request->user()->id,
-                'provider_code' => $request->provider_code,
-                'route' => 'Jakarta - Bandung',
+                'schedule_id' => $request->schedule_id,
+                'provider_code' => $schedule->vehicle->partner->code,
+                'route' => ($schedule->route->originCity ? $schedule->route->originCity->name : 'Unknown') . ' - ' . ($schedule->route->destinationCity ? $schedule->route->destinationCity->name : 'Unknown'),
                 'travel_date' => $request->travel_date,
                 'payment_type' => 'deposit',
-                'amount' => $amount,
+                'passenger_count' => $passengerCount,
+                'base_price' => $basePrice,
+                'admin_fee' => $adminFee,
+                'service_fee' => $serviceFee,
+                'amount' => $totalAmount,
                 'status' => 'pending',
+                'customer_name' => $request->customer_name,
+                'customer_phone' => $request->customer_phone,
+                'customer_email' => $request->customer_email,
+                'booked_at' => now(),
                 'provider_response' => [],
             ]);
 
+            // Create tickets for each passenger
             foreach ($request->passengers as $index => $passenger) {
+                $seat = $validSeats->where('id', $request->seats[$index])->first();
+                
+                Ticket::create([
+                    'transaction_id' => $transaction->id,
+                    'passenger_id' => null, // Will be set if passenger is a registered user
+                    'schedule_id' => $request->schedule_id,
+                    'seat_id' => $request->seats[$index],
+                    'price' => $basePrice,
+                    'status' => 'booked'
+                ]);
+
+                // Create passenger record for compatibility
                 TransactionPassenger::create([
                     'transaction_id' => $transaction->id,
                     'name' => $passenger['name'],
                     'identity_number' => $passenger['identity_number'],
-                    'seat_number' => $request->seats[$index],
+                    'seat_number' => $seat->seat_number,
                 ]);
             }
 
@@ -105,17 +328,34 @@ class TransactionController extends Controller
             return $this->successResponse('Booking successful', [
                 'trx_code' => $trxCode,
                 'status' => 'pending',
-                'amount' => $amount,
-                'expired_at' => now()->addMinutes(30),
+                'amount' => $totalAmount,
+                'passenger_count' => $passengerCount,
+                'base_price' => $basePrice,
+                'admin_fee' => $adminFee,
+                'service_fee' => $serviceFee,
+                'expired_at' => now()->addMinutes(30)->toISOString(),
+                'schedule' => [
+                    'id' => $schedule->id,
+                    'departure_time' => $schedule->departure_time,
+                    'arrival_time' => $schedule->arrival_time,
+                    'route' => ($schedule->route->originCity ? $schedule->route->originCity->name : 'Unknown') . ' → ' . ($schedule->route->destinationCity ? $schedule->route->destinationCity->name : 'Unknown'),
+                    'vehicle' => $schedule->vehicle->name . ' (' . $schedule->vehicle->plate_number . ')'
+                ],
+                'seats_booked' => $validSeats->pluck('seat_number')->toArray()
             ], 201);
+            
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->errorResponse('Booking failed', ['error' => $e->getMessage()], 500);
+            return $this->errorResponse('Booking failed', [
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ], 500);
         }
     }
-    
+
     /**
-     * bayar transaksi (seat-map)
+     * Process payment
      */
     public function pay(Request $request)
     {
@@ -137,24 +377,26 @@ class TransactionController extends Controller
 
         DB::beginTransaction();
         try {
-            // lock mitra untuk mengatasi kondisi race
             $mitra = $mitra->lockForUpdate()->find($mitra->id);
             
-            //re - check balance setelah lock
             if ($mitra->balance < $transaction->amount) {
                 DB::rollBack();
-                return $this->errorResponse('insufficient balance', [], 400);
+                return $this->errorResponse('Insufficient balance', [], 400);
             }
 
             $balanceBefore = $mitra->balance;
             $balanceAfter = $balanceBefore - $transaction->amount;
 
-            //update balance
             $mitra->balance = $balanceAfter;
             $mitra->save();
 
-            //update transaction
-            $transaction->update(['status' => 'paid']);
+            $transaction->update([
+                'status' => 'paid',
+                'paid_at' => now()
+            ]);
+
+            // Update tickets status
+            $transaction->tickets()->update(['status' => 'paid']);
 
             DB::commit();
 
@@ -171,24 +413,122 @@ class TransactionController extends Controller
     }
 
     /**
-     * get trx code transaction
+     * Get transaction details
      */
     public function show($trxCode)
     {
-        $transaction = Transaction::with(['mitra', 'user', 'passengers'])
-            ->where('trx_code', $trxCode)
-            ->firstOrFail();
-
-        // Mitra only see their own
-        if (request()->user()->hasRole('mitra') && $transaction->mitra_id !== request()->user()->mitra_id) {
-            return $this->errorResponse('Unauthorized', [], 403);
+        $query = Transaction::with([
+            'mitra:id,name,code',
+            'user:id,name,email', 
+            'schedule.vehicle:id,name,plate_number,seat_capacity,seat_layout',
+            'schedule.vehicle.partner:id,name,code',
+            'schedule.route.originCity:id,name',
+            'schedule.route.destinationCity:id,name',
+            'schedule.route.departureTerminal:id,name',
+            'schedule.route.arrivalTerminal:id,name',
+            'tickets.seat:id,seat_number,row,column',
+            'passengers:id,transaction_id,name,identity_number,seat_number'
+        ]);
+        
+        // Mitra only see their own transactions
+        if (request()->user()->hasRole('mitra')) {
+            $query->where('mitra_id', request()->user()->mitra_id);
+        }
+        
+        $transaction = $query->where('trx_code', $trxCode)->first();
+        
+        if (!$transaction) {
+            return $this->errorResponse('Transaction not found', [], 404);
         }
 
-        return $this->successResponse('Transaction retrieved', $transaction);
+        // Format response dengan informasi lengkap
+        $response = [
+            'transaction' => [
+                'id' => $transaction->id,
+                'trx_code' => $transaction->trx_code,
+                'status' => $transaction->status,
+                'travel_date' => $transaction->travel_date,
+                'passenger_count' => $transaction->passenger_count,
+                'base_price' => $transaction->base_price,
+                'admin_fee' => $transaction->admin_fee,
+                'service_fee' => $transaction->service_fee,
+                'amount' => $transaction->amount,
+                'payment_type' => $transaction->payment_type,
+                'customer_name' => $transaction->customer_name,
+                'customer_phone' => $transaction->customer_phone,
+                'customer_email' => $transaction->customer_email,
+                'notes' => $transaction->notes,
+                'booked_at' => $transaction->booked_at,
+                'paid_at' => $transaction->paid_at,
+                'issued_at' => $transaction->issued_at,
+                'cancelled_at' => $transaction->cancelled_at,
+                'created_at' => $transaction->created_at,
+                'updated_at' => $transaction->updated_at
+            ],
+            'schedule' => $transaction->schedule ? [
+                'id' => $transaction->schedule->id,
+                'departure_time' => $transaction->schedule->departure_time,
+                'arrival_time' => $transaction->schedule->arrival_time,
+                'price' => $transaction->schedule->price,
+                'travel_date' => $transaction->schedule->travel_date,
+                'vehicle' => $transaction->schedule->vehicle ? [
+                    'id' => $transaction->schedule->vehicle->id,
+                    'name' => $transaction->schedule->vehicle->name,
+                    'plate_number' => $transaction->schedule->vehicle->plate_number,
+                    'seat_capacity' => $transaction->schedule->vehicle->seat_capacity,
+                    'seat_layout' => $transaction->schedule->vehicle->seat_layout,
+                    'partner' => $transaction->schedule->vehicle->partner ? [
+                        'id' => $transaction->schedule->vehicle->partner->id,
+                        'name' => $transaction->schedule->vehicle->partner->name,
+                        'code' => $transaction->schedule->vehicle->partner->code
+                    ] : null
+                ] : null,
+                'route' => $transaction->schedule->route ? [
+                    'id' => $transaction->schedule->route->id,
+                    'origin_city' => $transaction->schedule->route->originCity ? $transaction->schedule->route->originCity->name : 'Unknown',
+                    'destination_city' => $transaction->schedule->route->destinationCity ? $transaction->schedule->route->destinationCity->name : 'Unknown',
+                    'departure_terminal' => $transaction->schedule->route->departureTerminal ? $transaction->schedule->route->departureTerminal->name : 'Unknown',
+                    'arrival_terminal' => $transaction->schedule->route->arrivalTerminal ? $transaction->schedule->route->arrivalTerminal->name : 'Unknown'
+                ] : null
+            ] : null,
+            'tickets' => $transaction->tickets->map(function($ticket) {
+                return [
+                    'id' => $ticket->id,
+                    'status' => $ticket->status,
+                    'price' => $ticket->price,
+                    'seat' => $ticket->seat ? [
+                        'id' => $ticket->seat->id,
+                        'seat_number' => $ticket->seat->seat_number,
+                        'row' => $ticket->seat->row,
+                        'column' => $ticket->seat->column
+                    ] : null
+                ];
+            }),
+            'passengers' => $transaction->passengers->map(function($passenger) {
+                return [
+                    'id' => $passenger->id,
+                    'name' => $passenger->name,
+                    'identity_number' => $passenger->identity_number,
+                    'seat_number' => $passenger->seat_number
+                ];
+            }),
+            'mitra' => $transaction->mitra ? [
+                'id' => $transaction->mitra->id,
+                'name' => $transaction->mitra->name,
+                'code' => $transaction->mitra->code
+            ] : null,
+            'user' => $transaction->user ? [
+                'id' => $transaction->user->id,
+                'name' => $transaction->user->name,
+                'email' => $transaction->user->email
+            ] : null
+        ];
+
+        return $this->successResponse('Transaction retrieved', $response);
     }
 
     /**
-     * trx transaction code issue
+     * Issue tickets
      */
     public function issue($trxCode)
     {
@@ -200,17 +540,20 @@ class TransactionController extends Controller
 
         DB::beginTransaction();
         try {
-            // Lock mitra untuk update balance fee
             $mitra = Mitra::lockForUpdate()->find($transaction->mitra_id);
             
-            // Update status
-            $transaction->update(['status' => 'issued']);
+            $transaction->update([
+                'status' => 'issued',
+                'issued_at' => now()
+            ]);
 
-            // Get fee configuration from partner_fees
+            // Update tickets status
+            $transaction->tickets()->update(['status' => 'issued']);
+
+            // Calculate and record fee
             $partnerFee = $mitra->partnerFees()->where('active', true)->first();
             
             if (!$partnerFee) {
-                // Default fee 5% if not configured
                 $feeType = 'percent';
                 $feeValue = 5;
                 $feeAmount = $transaction->amount * 0.05;
@@ -246,13 +589,12 @@ class TransactionController extends Controller
                 'description' => 'Fee from transaction ' . $trxCode,
             ]);
 
-            // Update balance mitra dengan fee
             $mitra->balance = $balanceAfter;
             $mitra->save();
 
             DB::commit();
 
-            return $this->successResponse('Ticket issued successfully', [
+            return $this->successResponse('Tickets issued successfully', [
                 'trx_code' => $trxCode,
                 'status' => 'issued',
                 'fee_earned' => $feeAmount,
@@ -266,7 +608,7 @@ class TransactionController extends Controller
     }
 
     /**
-     * transaction trx cancel
+     * Cancel transaction
      */
     public function cancel(Request $request, $trxCode)
     {
@@ -274,7 +616,18 @@ class TransactionController extends Controller
             'reason' => 'nullable|string|max:500',
         ]);
 
-        $transaction = Transaction::where('trx_code', $trxCode)->firstOrFail();
+        $query = Transaction::query();
+        
+        // Mitra only cancel their own transactions
+        if (request()->user()->hasRole('mitra')) {
+            $query->where('mitra_id', request()->user()->mitra_id);
+        }
+        
+        $transaction = $query->where('trx_code', $trxCode)->first();
+        
+        if (!$transaction) {
+            return $this->errorResponse('Transaction not found', [], 404);
+        }
 
         if (!in_array($transaction->status, ['pending', 'paid'])) {
             return $this->errorResponse('Cannot cancel this transaction', [], 400);
@@ -284,22 +637,27 @@ class TransactionController extends Controller
         try {
             $refundAmount = 0;
 
-            // Refund apabila sudah paid
             if ($transaction->status === 'paid') {
-                // Lock mitra untuk refund balance
                 $mitra = Mitra::lockForUpdate()->find($transaction->mitra_id);
                 $mitra->balance = $mitra->balance + $transaction->amount;
                 $mitra->save();
                 $refundAmount = $transaction->amount;
             }
 
-            $transaction->update(['status' => 'failed']);
+            $transaction->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'notes' => $request->reason
+            ]);
+
+            // Update tickets status
+            $transaction->tickets()->update(['status' => 'cancelled']);
 
             DB::commit();
 
             return $this->successResponse('Transaction cancelled', [
                 'trx_code' => $trxCode,
-                'status' => 'failed',
+                'status' => 'cancelled',
                 'refund_amount' => $refundAmount,
             ]);
 

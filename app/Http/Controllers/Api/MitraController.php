@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Hash;
 
 class MitraController extends Controller
 {
+    /**
+     * Register Mitra
+     */
     use ApiResponse;
     public function register(Request $request)
     {

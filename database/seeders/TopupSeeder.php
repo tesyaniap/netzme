@@ -17,8 +17,8 @@ class TopupSeeder extends Seeder
                 'mitra_id' => $mitra->id,
                 'amount' => 1000000,
                 'status' => 'pending',
-                'payment_method' => 'bank_transfer',
-                'payment_proof' => 'proof_' . time() . '.jpg',
+                'payment_method' => 'transfer',
+                'proof_file' => 'proof_' . time() . '.jpg',
             ]);
         }
     }

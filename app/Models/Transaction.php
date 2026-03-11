@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class Transaction extends Model
 {
-    const UPDATED_AT = null;
-
     protected $fillable = [
         'trx_code',
         'mitra_id',
@@ -19,13 +17,32 @@ class Transaction extends Model
         'amount',
         'status',
         'provider_response',
-        'created_at'
+        'schedule_id',
+        'passenger_count',
+        'base_price',
+        'admin_fee',
+        'service_fee',
+        'customer_name',
+        'customer_phone',
+        'customer_email',
+        'notes',
+        'booked_at',
+        'paid_at',
+        'issued_at',
+        'cancelled_at'
     ];
 
     protected $casts = [
         'travel_date' => 'date',
         'amount' => 'decimal:2',
-        'provider_response' => 'json'
+        'base_price' => 'decimal:2',
+        'admin_fee' => 'decimal:2',
+        'service_fee' => 'decimal:2',
+        'provider_response' => 'json',
+        'booked_at' => 'datetime',
+        'paid_at' => 'datetime',
+        'issued_at' => 'datetime',
+        'cancelled_at' => 'datetime'
     ];
 
     public function mitra()
@@ -36,6 +53,16 @@ class Transaction extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function schedule()
+    {
+        return $this->belongsTo(Schedule::class);
+    }
+
+    public function tickets()
+    {
+        return $this->hasMany(Ticket::class);
     }
 
     public function passengers()
