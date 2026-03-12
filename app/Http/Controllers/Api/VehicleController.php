@@ -74,11 +74,11 @@ class VehicleController extends Controller
     }
 
     /**
-     * Bulk create vehicles
+     * Generate bulk vehicle form
      * 
-     * Create multiple vehicles at once for a partner. Only admin can use this endpoint.
+     * Generate form data for bulk vehicle creation based on count
      */
-    public function bulkStore(Request $request)
+    public function generateBulkForm(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'partner_id' => 'required|exists:mitra,id',
@@ -96,15 +96,69 @@ class VehicleController extends Controller
             ], 422);
         }
 
-        $vehicles = [];
         $partner = Mitra::find($request->partner_id);
+        $vehicles = [];
         
         for ($i = 1; $i <= $request->count; $i++) {
             $vehicles[] = [
+                'index' => $i,
                 'name' => $request->base_name . ' ' . $i,
                 'plate_number' => strtoupper($partner->code) . ' ' . str_pad($i, 3, '0', STR_PAD_LEFT),
                 'seat_capacity' => $request->seat_capacity,
-                'seat_layout' => $request->seat_layout,
+                'seat_layout' => $request->seat_layout
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'partner' => [
+                    'id' => $partner->id,
+                    'name' => $partner->name,
+                    'code' => $partner->code
+                ],
+                'vehicles' => $vehicles,
+                'form_config' => [
+                    'base_name' => $request->base_name,
+                    'seat_capacity' => $request->seat_capacity,
+                    'seat_layout' => $request->seat_layout,
+                    'count' => $request->count
+                ]
+            ]
+        ]);
+    }
+
+    /**
+     * Bulk create vehicles from form data
+     * 
+     * Create multiple vehicles from submitted form data
+     */
+    public function bulkStore(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'partner_id' => 'required|exists:mitra,id',
+            'vehicles' => 'required|array|min:1|max:50',
+            'vehicles.*.name' => 'required|string',
+            'vehicles.*.plate_number' => 'required|string|unique:vehicles,plate_number',
+            'vehicles.*.seat_capacity' => 'required|integer|min:1',
+            'vehicles.*.seat_layout' => 'required|in:2-2,2-3,1-2'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $vehicleData = [];
+        foreach ($request->vehicles as $vehicle) {
+            $vehicleData[] = [
+                'name' => $vehicle['name'],
+                'plate_number' => $vehicle['plate_number'],
+                'seat_capacity' => $vehicle['seat_capacity'],
+                'seat_layout' => $vehicle['seat_layout'],
                 'partner_id' => $request->partner_id,
                 'status' => 'active',
                 'created_at' => now(),
@@ -112,15 +166,15 @@ class VehicleController extends Controller
             ];
         }
 
-        Vehicle::insert($vehicles);
+        Vehicle::insert($vehicleData);
 
         return response()->json([
             'success' => true,
-            'message' => "Successfully created {$request->count} vehicles",
+            'message' => "Successfully created " . count($request->vehicles) . " vehicles",
             'data' => VehicleResource::collection(
                 Vehicle::where('partner_id', $request->partner_id)
                        ->latest()
-                       ->take($request->count)
+                       ->take(count($request->vehicles))
                        ->with('partner')
                        ->get()
             )

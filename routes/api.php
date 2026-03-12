@@ -79,6 +79,7 @@ Route::prefix('v1')->group(function () {
             // Vehicle Management (Admin only - no specific permissions yet)
             Route::prefix('vehicles')->group(function () {
                 Route::post('/', [VehicleController::class, 'store']);
+                Route::post('/bulk/generate', [VehicleController::class, 'generateBulkForm']);
                 Route::post('/bulk', [VehicleController::class, 'bulkStore']);
                 Route::put('/{id}', [VehicleController::class, 'update']);
                 Route::delete('/{id}', [VehicleController::class, 'destroy']);

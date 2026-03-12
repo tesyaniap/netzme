@@ -61,7 +61,8 @@ Base URL: `/api/v1`
 |--------|----------|-------------|---------|
 | GET | `/vehicles` | List vehicles | Admin, Partner |
 | POST | `/vehicles` | Create vehicle | Admin |
-| POST | `/vehicles/bulk` | Bulk create vehicles | Admin |
+| POST | `/vehicles/bulk/generate` | Generate bulk vehicle form | Admin |
+| POST | `/vehicles/bulk` | Bulk create vehicles from form | Admin |
 | GET | `/vehicles/{id}` | Get vehicle details | Admin, Partner |
 | PUT | `/vehicles/{id}` | Update vehicle | Admin |
 | DELETE | `/vehicles/{id}` | Delete vehicle | Admin |
@@ -172,6 +173,15 @@ Base URL: `/api/v1`
 
 ### Booking Flow
 1. Search schedules → Seat map → Book → Pay → Issue tickets
+
+### Bulk Vehicle Creation Flow
+1. **Generate Form**: POST `/vehicles/bulk/generate` with initial parameters
+   - Input: partner_id, count, base_name, seat_capacity, seat_layout
+   - Output: Form data with generated vehicle names and plate numbers
+2. **Edit Form**: Frontend allows editing of vehicle names and plate numbers
+3. **Submit Form**: POST `/vehicles/bulk` with final vehicle data
+   - Input: partner_id, vehicles[] array with name, plate_number, etc.
+   - Output: Created vehicles in database
 
 ### Seat Management
 - Automatic seat generation based on vehicle layout
