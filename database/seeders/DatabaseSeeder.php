@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
             RoleAndAdminSeeder::class,
             PermissionSeeder::class,
             CitySeeder::class,
+            TerminalSeeder::class,
             TopupSeeder::class,
         ]);
     }
