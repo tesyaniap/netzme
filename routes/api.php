@@ -200,6 +200,7 @@ Route::prefix('v1')->group(function () {
         // Tickets (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('tickets')->group(function () {
             Route::get('/{id}', [TicketController::class, 'show']);
+            Route::get('/{id}/data', [TicketController::class, 'getTicketData']);
             Route::post('/{id}/reschedule', [TicketController::class, 'reschedule']);
         });
 
