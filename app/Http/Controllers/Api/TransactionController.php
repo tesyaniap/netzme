@@ -666,4 +666,171 @@ class TransactionController extends Controller
             return $this->errorResponse('Cancel failed', ['error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Get transaction statistics for mitra
+     * period: today | month | year
+     */
+    public function statistics(Request $request)
+    {
+        $request->validate([
+            'period' => 'required|in:today,month,year',
+            'month'  => 'nullable|integer|min:1|max:12',
+            'year'   => 'nullable|integer|min:2000',
+        ]);
+
+        $period = $request->period;
+        $month  = $request->month;
+        $year   = $request->year ?? date('Y');
+
+        $query = Transaction::where('mitra_id', $request->user()->mitra_id)
+                            ->where('status', 'issued');
+
+        if ($period === 'today') {
+            $query->whereDate('created_at', today());
+        } elseif ($period === 'month') {
+            if (!$month) {
+                return $this->errorResponse('Parameter month wajib diisi untuk period=month', [], 422);
+            }
+            $query->whereMonth('created_at', $month)
+                  ->whereYear('created_at', $year);
+        } elseif ($period === 'year') {
+            $query->whereYear('created_at', $year);
+        }
+
+        $count  = $query->count();
+        $amount = $query->sum('amount');
+
+        return response()->json([
+            'success' => true,
+            'message' => [
+                'count'  => $count,
+                'amount' => (int) $amount,
+            ],
+        ]);
+    }
+
+    /**
+     * Get paginated transaction history for mitra
+     */
+    public function history(Request $request)
+    {
+        $request->validate([
+            'page'     => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $perPage = $request->per_page ?? 10;
+
+        $transactions = Transaction::where('mitra_id', $request->user()->mitra_id)
+                                   ->with(['schedule.route.originCity', 'schedule.route.destinationCity'])
+                                   ->orderBy('created_at', 'desc')
+                                   ->paginate($perPage);
+
+        $data = $transactions->map(function ($trx) {
+            $route = null;
+            if ($trx->schedule && $trx->schedule->route) {
+                $origin      = optional($trx->schedule->route->originCity)->name ?? 'Unknown';
+                $destination = optional($trx->schedule->route->destinationCity)->name ?? 'Unknown';
+                $route       = $origin . ' - ' . $destination;
+            } else {
+                $route = $trx->route; // fallback to stored route string
+            }
+
+            return [
+                'id'          => $trx->id,
+                'trx_code'    => $trx->trx_code,
+                'route'       => $route,
+                'amount'      => (int) $trx->amount,
+                'status'      => $trx->status,
+                'travel_date' => $trx->travel_date ? $trx->travel_date->format('Y-m-d') : null,
+                'created_at'  => $trx->created_at ? $trx->created_at->format('Y-m-d H:i:s') : null,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'data'         => $data,
+                'current_page' => $transactions->currentPage(),
+                'last_page'    => $transactions->lastPage(),
+                'per_page'     => $transactions->perPage(),
+                'total'        => $transactions->total(),
+            ],
+        ]);
+    }
+
+    /**
+     * Print ticket data for a transaction
+     */
+    public function printTicket($trxCode)
+    {
+        $transaction = Transaction::where('trx_code', $trxCode)
+                                  ->where('mitra_id', request()->user()->mitra_id)
+                                  ->with([
+                                      'schedule.route.originCity',
+                                      'schedule.route.destinationCity',
+                                      'schedule.route.departureTerminal',
+                                      'schedule.route.arrivalTerminal',
+                                      'schedule.vehicle',
+                                      'tickets.seat',
+                                      'passengers',
+                                      'mitra',
+                                  ])
+                                  ->first();
+
+        if (!$transaction) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction not found',
+            ], 404);
+        }
+
+        if ($transaction->status !== 'issued') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tiket belum bisa dicetak',
+            ], 400);
+        }
+
+        $schedule = $transaction->schedule;
+        $route    = $schedule ? $schedule->route : null;
+        $vehicle  = $schedule ? $schedule->vehicle : null;
+
+        // Seat numbers from tickets
+        $seatNumbers = $transaction->tickets
+            ->filter(fn($t) => $t->seat)
+            ->map(fn($t) => $t->seat->seat_number)
+            ->join(', ');
+
+        // Passengers
+        $passengers = $transaction->passengers->map(function ($p) {
+            return [
+                'name'            => $p->name,
+                'identity_number' => $p->identity_number,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => [
+                'trx_code'             => $transaction->trx_code,
+                'origin'               => $route && $route->originCity      ? $route->originCity->name      : 'Unknown',
+                'origin_terminal'      => $route && $route->departureTerminal ? $route->departureTerminal->name : 'Unknown',
+                'destination'          => $route && $route->destinationCity  ? $route->destinationCity->name  : 'Unknown',
+                'destination_terminal' => $route && $route->arrivalTerminal  ? $route->arrivalTerminal->name  : 'Unknown',
+                'travel_date'          => $transaction->travel_date ? $transaction->travel_date->format('Y-m-d') : null,
+                'departure_time'       => $schedule ? $schedule->departure_time : null,
+                'class'                => $vehicle ? $vehicle->seat_layout : null,
+                'seat_numbers'         => $seatNumbers,
+                'passengers'           => $passengers,
+                'customer_name'        => $transaction->customer_name,
+                'customer_phone'       => $transaction->customer_phone,
+                'customer_email'       => $transaction->customer_email,
+                'amount'               => (int) $transaction->amount,
+                'status'               => $transaction->status,
+                'agent_name'           => $transaction->mitra ? $transaction->mitra->name : null,
+            ],
+        ]);
+    }
 }
