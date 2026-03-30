@@ -161,20 +161,6 @@ Route::prefix('v1')->group(function () {
                 Route::post('/', [TopupController::class, 'store'])->middleware('permission:topups.create');
             });
             
-            // Transaction Management (Mitra)
-            Route::prefix('transactions')->group(function () {
-                Route::post('/search', [TransactionController::class, 'search'])->middleware('permission:transactions.view');
-                Route::post('/seat-map', [TransactionController::class, 'seatMap'])->middleware('permission:transactions.view');
-                Route::post('/book', [TransactionController::class, 'book'])->middleware('permission:transactions.create');
-                Route::post('/pay', [TransactionController::class, 'pay'])->middleware('permission:transactions.pay');
-                Route::post('/{trx_code}/issue', [TransactionController::class, 'issue'])->middleware('permission:transactions.issue');
-
-                // New endpoints
-                Route::get('/schedules', [TransactionController::class, 'schedules'])->middleware('permission:transactions.view');
-                Route::get('/statistics', [TransactionController::class, 'statistics'])->middleware('permission:transactions.view');
-                Route::get('/history', [TransactionController::class, 'history'])->middleware('permission:transactions.view');
-                Route::get('/{trx_code}/print', [TransactionController::class, 'printTicket'])->middleware('permission:transactions.view');
-            });
         });
 
         // Topup Management (admin & mitra)
@@ -197,9 +183,22 @@ Route::prefix('v1')->group(function () {
             });
         });
 
-        // Transactions (admin & mitra)
+        // Transaction Management (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('transactions')->group(function () {
-            Route::get('/{trx_code}', [TransactionController::class, 'show'])->middleware('permission:transactions.view');
+            // ✅ Static routes HARUS di atas dynamic routes
+            Route::post('/search', [TransactionController::class, 'search'])->middleware('permission:transactions.view');
+            Route::post('/seat-map', [TransactionController::class, 'seatMap'])->middleware('permission:transactions.view');
+            Route::post('/book', [TransactionController::class, 'book'])->middleware('permission:transactions.create');
+            Route::post('/pay', [TransactionController::class, 'pay'])->middleware('permission:transactions.pay');
+            
+            Route::get('/schedules', [TransactionController::class, 'schedules'])->middleware('permission:transactions.view');
+            Route::get('/statistics', [TransactionController::class, 'statistics'])->middleware('permission:transactions.view');
+            Route::get('/history', [TransactionController::class, 'history'])->middleware('permission:transactions.view');
+
+            // Dynamic route di bawah
+            Route::get('/{trx_code}', [TransactionController::class, 'detail'])->middleware('permission:transactions.view');
+            Route::get('/{trx_code}/print', [TransactionController::class, 'print'])->middleware('permission:transactions.view');
+            Route::post('/{trx_code}/issue', [TransactionController::class, 'issue'])->middleware('permission:transactions.issue');
             Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel'])->middleware('permission:transactions.cancel');
         });
 

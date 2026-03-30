@@ -415,7 +415,7 @@ class TransactionController extends Controller
     /**
      * Get transaction details
      */
-    public function show($trxCode)
+    public function detail($trxCode)
     {
         $query = Transaction::with([
             'mitra:id,name,code',
@@ -763,7 +763,7 @@ class TransactionController extends Controller
     /**
      * Print ticket data for a transaction
      */
-    public function printTicket($trxCode)
+    public function print($trxCode)
     {
         $transaction = Transaction::where('trx_code', $trxCode)
                                   ->where('mitra_id', request()->user()->mitra_id)
