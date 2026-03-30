@@ -170,6 +170,7 @@ Route::prefix('v1')->group(function () {
                 Route::post('/{trx_code}/issue', [TransactionController::class, 'issue'])->middleware('permission:transactions.issue');
 
                 // New endpoints
+                Route::get('/schedules', [TransactionController::class, 'schedules'])->middleware('permission:transactions.view');
                 Route::get('/statistics', [TransactionController::class, 'statistics'])->middleware('permission:transactions.view');
                 Route::get('/history', [TransactionController::class, 'history'])->middleware('permission:transactions.view');
                 Route::get('/{trx_code}/print', [TransactionController::class, 'printTicket'])->middleware('permission:transactions.view');

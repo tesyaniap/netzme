@@ -833,4 +833,67 @@ class TransactionController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Get list of schedules with available seats
+     */
+    public function schedules(Request $request)
+    {
+        $request->validate([
+            'date_from' => 'nullable|date_format:Y-m-d',
+            'date_to'   => 'nullable|date_format:Y-m-d|after_or_equal:date_from',
+        ]);
+
+        $query = Schedule::with([
+            'vehicle',
+            'route.originCity',
+            'route.destinationCity',
+        ]);
+
+        if ($request->date_from) {
+            $query->whereDate('travel_date', '>=', $request->date_from);
+        }
+
+        if ($request->date_to) {
+            $query->whereDate('travel_date', '<=', $request->date_to);
+        }
+
+        $schedules = $query->orderBy('travel_date')->orderBy('departure_time')->get();
+
+        $data = $schedules->map(function ($schedule) {
+            $totalSeats = $schedule->vehicle ? $schedule->vehicle->seat_capacity : 0;
+
+            // Count booked/paid/issued tickets for this schedule on its travel_date
+            $bookedSeats = Ticket::where('schedule_id', $schedule->id)
+                ->whereHas('transaction', function ($q) use ($schedule) {
+                    $q->whereIn('status', ['pending', 'paid', 'issued']);
+                    if ($schedule->travel_date) {
+                        $q->whereDate('travel_date', $schedule->travel_date->format('Y-m-d'));
+                    }
+                })
+                ->count();
+
+            $availableSeats = max(0, $totalSeats - $bookedSeats);
+
+            $origin      = optional(optional($schedule->route)->originCity)->name ?? 'Unknown';
+            $destination = optional(optional($schedule->route)->destinationCity)->name ?? 'Unknown';
+
+            return [
+                'id'              => $schedule->id,
+                'route'           => $origin . ' - ' . $destination,
+                'departure_time'  => $schedule->departure_time,
+                'travel_date'     => $schedule->travel_date ? $schedule->travel_date->format('Y-m-d') : null,
+                'price'           => (string) $schedule->price,
+                'available_seats' => $availableSeats,
+                'total_seats'     => $totalSeats,
+            ];
+        });
+
+        return response()->json([
+            'status'  => true,
+            'message' => [
+                'schedules' => $data,
+            ],
+        ]);
+    }
 }
