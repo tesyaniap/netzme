@@ -115,6 +115,8 @@ class TopupController extends Controller
                 'topup_id' => $topup->id,
                 'mitra_id' => $topup->mitra_id,
                 'amount' => $topup->amount,
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
                 'description' => 'Topup approved',
             ]);
 
