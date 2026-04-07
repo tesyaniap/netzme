@@ -2,6 +2,10 @@
 
 This is my own version of Laravel 12 MCP Boilerplate project.
 
+## Dokumentasi Projek
+- [**Alur Kerja Projek (Project Flow)**](./README_FLOW.md) - Penjelasan detail alur dari awal sampai akhir.
+- [**Teknologi & Library (Tech Stack)**](./README_LIBRARIES.md) - Daftar library yang digunakan (Passport, Permission, dll).
+
 ## Repository
 - **Original**: https://github.com/arifinmn11/laravel-12-init.git
 - **My Version**: https://github.com/lexwan/laravel-12-own.git
