@@ -13,7 +13,8 @@ class Topup extends Model
         'status',
         'proof_file',
         'approved_by',
-        'approved_at'
+        'approved_at',
+        'reject_reason'
     ];
 
     protected $casts = [

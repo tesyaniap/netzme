@@ -144,13 +144,31 @@ class TopupController extends Controller
             return $this->errorResponse('Topup already processed', [], 400);
         }
 
-        $topup->update([
-            'status' => 'rejected',
-            'approved_by' => $request->user()->id,
-            'approved_at' => now(),
-            'reject_reason' => $request->reason,
-        ]);
+        DB::beginTransaction();
+        try {
+            $topup->update([
+                'status' => 'rejected',
+                'approved_by' => $request->user()->id,
+                'approved_at' => now(),
+                'reject_reason' => $request->reason,
+            ]);
 
-        return $this->successResponse('Topup rejected successfully', $topup->fresh(['mitra', 'approver']));
+            // buat topup history untuk rejection (audit trail)
+            TopupHistory::create([
+                'topup_id' => $topup->id,
+                'mitra_id' => $topup->mitra_id,
+                'amount' => $topup->amount,
+                'balance_before' => $topup->mitra->balance,
+                'balance_after' => $topup->mitra->balance, // saldo tidak berubah
+                'description' => 'Topup rejected: ' . ($request->reason ?? 'No reason provided'),
+            ]);
+
+            DB::commit();
+
+            return $this->successResponse('Topup rejected successfully', $topup->fresh(['mitra', 'approver']));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->errorResponse('Failed to reject topup', ['error' => $e->getMessage()], 500);
+        }
     }
 }

@@ -1,108 +1,107 @@
-# Visualisasi Sistem: Flowchart & DFD
+# Visualisasi Sistem: Flowchart & DFD (Conceptual Version)
 
-Dokumen ini berisi visualisasi sistem yang dirancang untuk memberikan pemahaman mendalam mengenai alur kerja dan aliran data pada aplikasi Backend Tiket Bus.
+Dokumen ini berisi visualisasi sistem yang menjelaskan alur kerja dan aliran data pada aplikasi Backend Tiket Bus secara logis dan mudah dipahami, tanpa menggunakan istilah teknis pemrograman yang rumit.
 
 ---
 
-## 1. Flowchart: Alur Reservasi & Pembayaran Tiket (Core Business Logic)
-**Analisis**: Alur ini menggunakan sistem *atomic transaction* di mana pemotongan saldo mitra hanya dilakukan setelah validasi kursi dan saldo berhasil, guna mencegah kegagalan sinkronisasi data keuangan.
+## 1. Flowchart: Alur Proses Pembelian Tiket
+**Analisis**: Alur ini memastikan bahwa setiap pembelian tiket melalui tahapan validasi yang ketat, mulai dari pengecekan ketersediaan kursi hingga kecukupan saldo mitra sebelum tiket resmi diterbitkan.
 
 ```mermaid
 graph TD
-    A([Mulai]) --> B[Pencarian Jadwal Perjalanan]
-    B --> C{Jadwal Ditemukan?}
-    C -- Tidak --> B
-    C -- Ya --> D[Pilih Kursi dari Seat Map]
-    D --> E{Kursi Tersedia?}
-    E -- Tidak --> D
-    E -- Ya --> F[Input Data Penumpang & Reservasi]
-    F --> G[Sistem Generate Kode Transaksi - Status: Pending]
-    G --> H[Proses Pembayaran via Saldo Mitra]
-    H --> I{Saldo Mencukupi?}
-    I -- Tidak --> J[Transaksi Gagal - Saldo Tidak Cukup]
-    I -- Ya --> K[Potong Saldo Mitra & Catat Mutasi Saldo]
-    K --> L[Update Status Transaksi: Paid]
-    L --> M[Penerbitan Tiket Digital - Issue Ticket]
-    M --> N[Cetak Tiket / Unduh PDF]
+    A([Mulai]) --> B[Login ke Sistem]
+    B --> C[Cari Jadwal Perjalanan <br/>(Asal, Tujuan, Tanggal)]
+    C --> D{Jadwal Tersedia?}
+    D -- Tidak --> C
+    D -- Ya --> E[Lihat Denah Kursi & Pilih Kursi]
+    E --> F[Input Data Penumpang & Buat Reservasi]
+    F --> G[Sistem Menghitung Total Biaya <br/>(Harga Tiket + Biaya Layanan)]
+    G --> H[Status: Menunggu Pembayaran]
+    H --> I[Proses Pembayaran Menggunakan Saldo]
+    I --> J{Saldo Mencukupi?}
+    J -- Tidak --> K[Transaksi Dibatalkan / Saldo Kurang]
+    J -- Ya --> L[Saldo Terpotong & Status: Terbayar]
+    L --> M[Penerbitan Tiket Digital]
+    M --> N[Tiket Selesai & Siap Dicetak]
     N --> O([Selesai])
 ```
 
 ---
 
-## 2. DFD Level 0 (Context Diagram)
-**Analisis**: Diagram ini menunjukkan bahwa sistem bertindak sebagai entitas pusat yang mengelola pertukaran informasi terenkripsi antara Admin (manajer data) dan Mitra (operator penjualan) secara real-time.
+## 2. DFD Level 0: Diagram Konteks (Sistem Utama)
+**Analisis**: Sistem ini bertindak sebagai pusat pengelolaan data yang menghubungkan **Admin** sebagai pengelola seluruh armada dan jadwal, serta **Mitra** sebagai pihak yang melakukan penjualan tiket ke penumpang.
 
 ```mermaid
 graph LR
-    subgraph Sistem_Pemesanan_Tiket_Bus
-        S[((Aplikasi Backend Tiket Bus))]
+    subgraph Sistem_Informasi_Tiket_Bus
+        S[((Aplikasi Pengelolaan Tiket Bus))]
     end
 
-    Admin[Entitas: Admin] -- Kelola Master Data,\nApprove Topup,\nMonitor Laporan Keuangan --> S
-    S -- Laporan Rekapitulasi,\nNotifikasi Sistem --> Admin
+    Admin[Entitas: Admin] -- Kelola Data Kota, Rute,<br/>Bus, dan Jadwal --> S
+    S -- Laporan Penjualan &<br/>Riwayat Transaksi --> Admin
 
-    Mitra[Entitas: Mitra] -- Request Topup Saldo,\nReservasi Tiket,\nOtorisasi Pembayaran --> S
-    S -- E-Ticket,\nInformasi Sisa Saldo,\nStatus Transaksi --> Mitra
+    Mitra[Entitas: Mitra/Agen] -- Pengisian Saldo,<br/>Pemesanan Tiket, &<br/>Konfirmasi Pembayaran --> S
+    S -- Informasi Tiket,<br/>Sisa Saldo, &<br/>Status Transaksi --> Mitra
 ```
 
 ---
 
-## 3. DFD Level 1 (Diagram Proses Internal)
-**Analisis**: Pemisahan modul menjadi lima proses utama memastikan sistem memiliki *high cohesion* dan *low coupling*, sehingga memudahkan skalabilitas dan audit pada setiap fungsi bisnis (Auth, Master Data, Finance, Transaction, Reporting).
+## 3. DFD Level 1: Diagram Aliran Data (Proses Bisnis)
+**Analisis**: Sistem membagi tugas menjadi empat proses utama untuk memastikan data keamanan pengguna, ketersediaan data master, kelancaran transaksi, dan keakuratan saldo tetap terjaga.
 
 ```mermaid
 graph TD
     %% Entitas Luar
     Admin[Admin]
-    Mitra[Mitra]
+    Mitra[Mitra/Agen]
 
-    %% Proses-Proses Utama
-    P1((1.0\nManajemen\nAutentikasi))
-    P2((2.0\nManajemen\nMaster Data))
-    P3((3.0\nManajemen\nSaldo & Topup))
-    P4((4.0\nProses\nTransaksi))
-    P5((5.0\nPelaporan &\nUpdate Database))
+    %% Proses Utama
+    P1((1.0<br/>Sistem<br/>Keamanan Login))
+    P2((2.0<br/>Pengelolaan<br/>Data Perjalanan))
+    P3((3.0<br/>Pengelolaan<br/>Transaksi Tiket))
+    P4((4.0<br/>Manajemen<br/>Saldo Mitra))
 
-    %% Data Stores
-    D1[(Users Table)]
-    D2[(Master Data Table\nCities, Routes, etc)]
-    D3[(Transactions & \nTopups Table)]
-    D4[(Balance Histories & \nFees Table)]
+    %% Penyimpanan Data (Storage)
+    D1[(Data Pengguna)]
+    D2[(Data Jadwal & Kursi)]
+    D3[(Data Riwayat Transaksi)]
+    D4[(Data Saldo & Biaya)]
 
-    %% Aliran Data Admin
-    Admin --> P1
-    Admin --> P2
-    Admin --> P3
-    Admin --> P5
-    P2 <--> D2
-    P3 <--> D3
-
-    %% Aliran Data Mitra
-    Mitra --> P1
-    Mitra --> P3
-    Mitra --> P4
+    %% Aliran Data
+    Mitra -- Data Login --> P1
     P1 <--> D1
-    P4 <--> D2
+    P1 -- Izin Akses --> Mitra
+
+    Admin -- Update Jadwal/Bus --> P2
+    P2 <--> D2
+    P2 -- Info Perjalanan --> Mitra
+
+    Mitra -- Input Pesanan --> P3
+    P3 <--> D2
+    P3 <--> D3
+    P3 -- Kode Transaksi --> Mitra
+
+    Mitra -- Konfirmasi Bayar --> P4
     P4 <--> D3
-    D3 --> P5
-    P4 --> D4
-    P5 --> Admin
+    P4 <--> D4
+    P4 -- Status Pembayaran --> Mitra
 ```
 
 ---
 
-## Standar Penamaan & Istilah (Glossary)
-Untuk menjaga konsistensi pada laporan, gunakan istilah berikut:
-- **Admin**: Pengguna dengan hak akses penuh untuk mengelola data master dan keuangan.
-- **Mitra**: Agen atau pihak ketiga yang melakukan penjualan tiket menggunakan sistem saldo.
-- **Master Data**: Kumpulan data dasar (Kota, rute, bus, jadwal).
-- **Topup**: Proses pengisian ulang saldo Mitra.
-- **Reservasi**: Proses pemesanan kursi sebelum pembayaran dilakukan.
-- **Issue Ticket**: Proses penerbitan tiket resmi setelah pembayaran dikonfirmasi.
+## Glosarium (Istilah Penting)
+Untuk mempermudah penjelasan saat ditanya penguji, gunakan istilah berikut:
+- **Admin**: Pengelola sistem yang mengatur data dasar seperti bus dan jadwal keberangkatan.
+- **Mitra/Agen**: Pengguna sistem yang melayani pembeli tiket dan memiliki deposit saldo.
+- **Biaya Layanan**: Biaya tambahan di luar harga tiket untuk pemeliharaan sistem.
+- **Reservasi**: Proses mengunci kursi sementara sebelum dibayar.
+- **Saldo Deposito**: Modal yang dimiliki mitra di dalam sistem untuk bertransaksi.
 
 ---
 
-## Penjelasan Singkat
-1.  **Flowchart**: Menekankan pada validasi saldo dan ketersediaan kursi sebelum transaksi dianggap sukses.
-2.  **DFD Level 0**: Memposisikan aplikasi sebagai pusat aliran informasi antara Admin (penyedia data/pengawas) dan Mitra (pengguna/penjual).
-3.  **DFD Level 1**: Membagi beban kerja sistem ke 5 area utama (Auth, Master Data, Finance, Transaction, Reporting) yang semuanya saling terintegrasi melalui database.
+## Logika Bisnis Utama (Tips Penguji)
+Poin-poin ini bisa Anda gunakan untuk menjelaskan "kenapa sistem dibuat seperti ini":
+1.  **Keamanan Berlapis**: Setiap pengguna harus login agar identitas pemesan tiket terekam dengan jelas.
+2.  **Validasi Saldo**: Pembayaran dilakukan secara otomatis melalui potongan saldo untuk mempercepat proses tanpa perlu transfer manual setiap kali pesan tiket.
+3.  **Akurasi Kursi**: Sistem memastikan satu kursi hanya bisa dipesan oleh satu orang pada jadwal yang sama untuk menghindari bentrokan (*double booking*).
+4.  **Skalabilitas**: Sistem dirancang agar dapat menangani banyak kota dan rute dengan mudah hanya melalui pengaturan di sisi Admin.
