@@ -22,10 +22,12 @@ class ReportController extends Controller
     public function transactions(Request $request)
     {
         $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-            'status' => 'nullable|in:pending,paid,issued,cancelled,failed,success',
-            'mitra_id' => 'nullable|exists:mitra,id',
+            'start_date'  => 'nullable|date',
+            'end_date'    => 'nullable|date',
+            'travel_date' => 'nullable|date',
+            'status'      => 'nullable|in:pending,paid,issued,cancelled,failed,success',
+            'mitra_id'    => 'nullable|exists:mitra,id',
+            'search'      => 'nullable|string',
         ]);
 
         $query = Transaction::with(['mitra', 'fee', 'user']);
@@ -39,6 +41,16 @@ class ReportController extends Controller
         }
         if ($request->end_date) {
             $query->whereDate('created_at', '<=', $request->end_date);
+        }
+        if ($request->travel_date) {
+            $query->whereDate('travel_date', $request->travel_date);
+        }
+        if ($request->search) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('trx_code', 'like', "%{$search}%")
+                  ->orWhere('customer_name', 'like', "%{$search}%");
+            });
         }
 
         if ($request->status) {

@@ -38,7 +38,12 @@ class TransactionController extends Controller
         
         // Filter berdasarkan travel_date jika ada
         if ($request->travel_date) {
-            $query->whereDate('travel_date', $request->travel_date);
+            // Jika schedule memiliki travel_date spesifik, harus match
+            // Jika schedule tidak memiliki travel_date (null), berarti template harian yang bisa digunakan
+            $query->where(function($q) use ($request) {
+                $q->whereDate('travel_date', $request->travel_date)
+                  ->orWhereNull('travel_date'); // Include template schedules
+            });
         }
         
         // Filter berdasarkan route
@@ -106,7 +111,7 @@ class TransactionController extends Controller
             ], 404);
         }
         
-        return $this->successResponse('Schedules found', [
+        return $this->successResponse([
             'total_schedules' => $schedules->count(),
             'search_params' => [
                 'origin' => $request->origin,
@@ -114,7 +119,7 @@ class TransactionController extends Controller
                 'travel_date' => $request->travel_date
             ],
             'schedules' => $schedules
-        ]);
+        ], 'Schedules found');
     }
 
     /**
@@ -140,9 +145,16 @@ class TransactionController extends Controller
         $seats = $schedule->vehicle->seats()->orderBy('row')->orderBy('column')->get();
         
         if ($seats->isEmpty()) {
-            return $this->errorResponse('No seats configured for this vehicle', [
-                'suggestion' => 'Please generate seats for vehicle ID: ' . $schedule->vehicle_id
-            ], 404);
+            // Auto-generate seats if they don't exist
+            $this->generateSeatsForVehicle($schedule->vehicle);
+            $seats = $schedule->vehicle->seats()->orderBy('row')->orderBy('column')->get();
+            
+            if ($seats->isEmpty()) {
+                return $this->errorResponse('Failed to generate seats for this vehicle', [
+                    'vehicle_id' => $schedule->vehicle_id,
+                    'seat_capacity' => $schedule->vehicle->seat_capacity
+                ], 500);
+            }
         }
         
         // Get booked seats for this schedule and date
@@ -168,7 +180,7 @@ class TransactionController extends Controller
         // Group seats by row for easier frontend rendering
         $seatsByRow = $seatMap->groupBy('row');
 
-        return $this->successResponse('Seat map retrieved', [
+        return $this->successResponse([
             'schedule' => [
                 'id' => $schedule->id,
                 'departure_time' => $schedule->departure_time,
@@ -196,7 +208,7 @@ class TransactionController extends Controller
             'seats' => $seatMap,
             'seats_by_row' => $seatsByRow,
             'travel_date' => $request->travel_date
-        ]);
+        ], 'Seat map retrieved');
     }
 
     /**
@@ -325,7 +337,7 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            return $this->successResponse('Booking successful', [
+            return $this->successResponse([
                 'trx_code' => $trxCode,
                 'status' => 'pending',
                 'amount' => $totalAmount,
@@ -342,7 +354,7 @@ class TransactionController extends Controller
                     'vehicle' => $schedule->vehicle->name . ' (' . $schedule->vehicle->plate_number . ')'
                 ],
                 'seats_booked' => $validSeats->pluck('seat_number')->toArray()
-            ], 201);
+            ], 'Booking successful', 201);
             
         } catch (\Exception $e) {
             DB::rollBack();
@@ -400,12 +412,12 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            return $this->successResponse('Payment successful', [
+            return $this->successResponse([
                 'trx_code' => $transaction->trx_code,
                 'status' => 'paid',
                 'balance_before' => $balanceBefore,
                 'balance_after' => $balanceAfter,
-            ]);
+            ], 'Payment successful');
         } catch (\Exception $e) {
             DB::rollBack();
             return $this->errorResponse('Payment failed', ['error' => $e->getMessage()], 500);
@@ -447,8 +459,7 @@ class TransactionController extends Controller
                 'id' => $transaction->id,
                 'trx_code' => $transaction->trx_code,
                 'status' => $transaction->status,
-                'travel_date' => $transaction->travel_date,
-                'passenger_count' => $transaction->passenger_count,
+                'travel_date' => $transaction->travel_date ? $transaction->travel_date->format('Y-m-d') : null,
                 'base_price' => $transaction->base_price,
                 'admin_fee' => $transaction->admin_fee,
                 'service_fee' => $transaction->service_fee,
@@ -470,7 +481,9 @@ class TransactionController extends Controller
                 'departure_time' => $transaction->schedule->departure_time,
                 'arrival_time' => $transaction->schedule->arrival_time,
                 'price' => $transaction->schedule->price,
-                'travel_date' => $transaction->schedule->travel_date,
+                'travel_date' => $transaction->schedule->travel_date
+                    ? $transaction->schedule->travel_date->format('Y-m-d')
+                    : null,
                 'vehicle' => $transaction->schedule->vehicle ? [
                     'id' => $transaction->schedule->vehicle->id,
                     'name' => $transaction->schedule->vehicle->name,
@@ -524,7 +537,7 @@ class TransactionController extends Controller
             ] : null
         ];
 
-        return $this->successResponse('Transaction retrieved', $response);
+        return $this->successResponse($response, 'Transaction retrieved');
     }
 
     /**
@@ -594,12 +607,12 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            return $this->successResponse('Tickets issued successfully', [
+            return $this->successResponse([
                 'trx_code' => $trxCode,
                 'status' => 'issued',
                 'fee_earned' => $feeAmount,
                 'balance_after' => $balanceAfter,
-            ]);
+            ], 'Tickets issued successfully');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -655,11 +668,11 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            return $this->successResponse('Transaction cancelled', [
+            return $this->successResponse([
                 'trx_code' => $trxCode,
                 'status' => 'cancelled',
                 'refund_amount' => $refundAmount,
-            ]);
+            ], 'Transaction cancelled');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -851,11 +864,19 @@ class TransactionController extends Controller
         ]);
 
         if ($request->date_from) {
-            $query->whereDate('travel_date', '>=', $request->date_from);
+            // Include schedules with specific travel_date >= date_from OR template schedules (travel_date = null)
+            $query->where(function($q) use ($request) {
+                $q->whereDate('travel_date', '>=', $request->date_from)
+                  ->orWhereNull('travel_date');
+            });
         }
 
         if ($request->date_to) {
-            $query->whereDate('travel_date', '<=', $request->date_to);
+            // Only apply date_to filter if travel_date is not null
+            $query->where(function($q) use ($request) {
+                $q->whereDate('travel_date', '<=', $request->date_to)
+                  ->orWhereNull('travel_date');
+            });
         }
 
         $schedules = $query->orderBy('travel_date')->orderBy('departure_time')->get();
@@ -863,13 +884,10 @@ class TransactionController extends Controller
         $data = $schedules->map(function ($schedule) {
             $totalSeats = $schedule->vehicle ? $schedule->vehicle->seat_capacity : 0;
 
-            // Count booked/paid/issued tickets for this schedule on its travel_date
+            // Count booked/paid/issued tickets for this schedule
             $bookedSeats = Ticket::where('schedule_id', $schedule->id)
-                ->whereHas('transaction', function ($q) use ($schedule) {
+                ->whereHas('transaction', function ($q) {
                     $q->whereIn('status', ['pending', 'paid', 'issued']);
-                    if ($schedule->travel_date) {
-                        $q->whereDate('travel_date', $schedule->travel_date->format('Y-m-d'));
-                    }
                 })
                 ->count();
 
@@ -882,10 +900,17 @@ class TransactionController extends Controller
                 'id'              => $schedule->id,
                 'route'           => $origin . ' - ' . $destination,
                 'departure_time'  => $schedule->departure_time,
+                'arrival_time'    => $schedule->arrival_time,
                 'travel_date'     => $schedule->travel_date ? $schedule->travel_date->format('Y-m-d') : null,
                 'price'           => (string) $schedule->price,
                 'available_seats' => $availableSeats,
                 'total_seats'     => $totalSeats,
+                'vehicle'         => $schedule->vehicle ? [
+                    'id' => $schedule->vehicle->id,
+                    'name' => $schedule->vehicle->name,
+                    'plate_number' => $schedule->vehicle->plate_number,
+                    'seat_capacity' => $schedule->vehicle->seat_capacity,
+                ] : null
             ];
         });
 
@@ -893,7 +918,47 @@ class TransactionController extends Controller
             'status'  => true,
             'message' => [
                 'schedules' => $data,
+                'total_schedules' => $data->count(),
+                'debug_info' => [
+                    'date_from' => $request->date_from,
+                    'date_to' => $request->date_to,
+                    'total_schedules_in_db' => Schedule::count(),
+                    'schedules_with_vehicles' => Schedule::whereHas('vehicle')->count(),
+                    'schedules_with_routes' => Schedule::whereHas('route')->count(),
+                ]
             ],
         ]);
+    }
+
+    /**
+     * Auto-generate seats for a vehicle
+     */
+    private function generateSeatsForVehicle($vehicle)
+    {
+        // Skip if seats already exist
+        if ($vehicle->seats()->count() > 0) {
+            return;
+        }
+
+        $seatLayout = $vehicle->class === 'eksekutif' ? '2-1' : ($vehicle->class === 'bisnis' ? '2-2' : '2-3');
+        $seatsPerRow = $seatLayout === '2-1' ? 3 : ($seatLayout === '2-2' ? 4 : 5);
+        $rows = ceil($vehicle->seat_capacity / $seatsPerRow);
+
+        $seatNumber = 1;
+        for ($row = 1; $row <= $rows; $row++) {
+            for ($col = 1; $col <= $seatsPerRow; $col++) {
+                if ($seatNumber > $vehicle->seat_capacity) break;
+
+                Seat::create([
+                    'vehicle_id' => $vehicle->id,
+                    'seat_number' => str_pad($seatNumber, 2, '0', STR_PAD_LEFT),
+                    'row' => $row,
+                    'column' => $col,
+                    'is_available' => true
+                ]);
+
+                $seatNumber++;
+            }
+        }
     }
 }

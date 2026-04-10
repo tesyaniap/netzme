@@ -16,6 +16,7 @@ class ScheduleResource extends JsonResource
             'departure_time' => $this->departure_time,
             'arrival_time' => $this->arrival_time,
             'price' => $this->price,
+            'travel_date' => $this->travel_date,
             'vehicle' => new VehicleResource($this->whenLoaded('vehicle')),
             'route' => new RouteResource($this->whenLoaded('route')),
             'created_at' => $this->created_at,

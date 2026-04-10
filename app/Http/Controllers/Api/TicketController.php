@@ -21,7 +21,7 @@ class TicketController extends Controller
         $user = auth()->user();
         $query = Ticket::with([
             'transaction:id,trx_code,mitra_id,customer_name,customer_phone,status,amount,created_at',
-            'schedule.vehicle.partner:id,name,code,phone,address',
+            'schedule.vehicle.partner:id,name,code,phone',
             'schedule.route.originCity:id,name,province',
             'schedule.route.destinationCity:id,name,province', 
             'schedule.route.departureTerminal:id,name,address',
@@ -53,9 +53,9 @@ class TicketController extends Controller
             'status' => $ticket->status,
             'issued_date' => $ticket->created_at->format('d F Y H:i'),
             
-            // Passenger info
+            // Passenger info — ambil dari transaction karena passenger_id bisa null
             'passenger' => [
-                'name' => $ticket->transaction->customer_name,
+                'name'  => $ticket->transaction->customer_name,
                 'phone' => $ticket->transaction->customer_phone,
             ],
             
@@ -103,10 +103,9 @@ class TicketController extends Controller
             
             // Partner/Operator info
             'operator' => [
-                'name' => $ticket->schedule->vehicle->partner->name,
-                'code' => $ticket->schedule->vehicle->partner->code,
-                'phone' => $ticket->schedule->vehicle->partner->phone ?? '-',
-                'address' => $ticket->schedule->vehicle->partner->address ?? '-',
+                'name'    => $ticket->schedule->vehicle->partner->name,
+                'code'    => $ticket->schedule->vehicle->partner->code,
+                'phone'   => $ticket->schedule->vehicle->partner->phone ?? '-',
             ],
             
             // Price info

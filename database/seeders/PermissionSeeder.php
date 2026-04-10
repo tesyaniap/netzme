@@ -20,7 +20,7 @@ class PermissionSeeder extends Seeder
             
             // Mitra (Admin)
             'mitra.view', 'mitra.create', 'mitra.update', 'mitra.delete',
-            'mitra.approve', 'mitra.reject', 'mitra.fee',
+            'mitra.approve', 'mitra.reject', 'mitra.fee', 'mitra.deactivate', 'mitra.reactivate',
             
             // Topup 
             'topups.view', 'topups.create', 'topups.approve', 'topups.reject',
@@ -55,10 +55,13 @@ class PermissionSeeder extends Seeder
             'seats.view', 'seats.create', 'seats.update', 'seats.delete', 'seats.generate',
             
             // Tickets
-            'tickets.view', 'tickets.reschedule', 'tickets.cancel',
+            'tickets.view', 'tickets.reschedule', 'tickets.cancel', 'tickets.print',
             
             // Dashboard
             'dashboard.admin', 'dashboard.partner',
+            
+            // Locations (Admin) - for LocationManagement
+            'locations.view', 'locations.create', 'locations.update', 'locations.delete',
         ];
 
         // buat permissions
@@ -79,7 +82,7 @@ class PermissionSeeder extends Seeder
                 'roles.view', 'roles.create', 'roles.update', 'roles.delete',
                 'permissions.view', 'permissions.assign',
                 'mitra.view', 'mitra.create', 'mitra.update', 'mitra.delete',
-                'mitra.approve', 'mitra.reject', 'mitra.fee',
+                'mitra.approve', 'mitra.reject', 'mitra.fee', 'mitra.deactivate', 'mitra.reactivate',
                 'topups.view', 'topups.approve', 'topups.reject',
                 'transactions.view', 'transactions.cancel',
                 'balance.view', 'balance.histories', 'fee-ledgers.view',
@@ -90,7 +93,8 @@ class PermissionSeeder extends Seeder
                 'schedules.view', 'schedules.create', 'schedules.update', 'schedules.delete',
                 'vehicles.view', 'vehicles.create', 'vehicles.update', 'vehicles.delete', 'vehicles.bulk-create',
                 'seats.view', 'seats.create', 'seats.update', 'seats.delete', 'seats.generate',
-                'tickets.view', 'tickets.reschedule', 'tickets.cancel',
+                'tickets.view', 'tickets.reschedule', 'tickets.cancel', 'tickets.print',
+                'locations.view', 'locations.create', 'locations.update', 'locations.delete',
                 'dashboard.admin',
             ]);
         }

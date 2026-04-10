@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\SeatController;
 use App\Http\Controllers\Api\TicketController;
+use App\Http\Controllers\Api\TicketRescheduleController;
 use App\Http\Controllers\Api\CityController;
 use App\Http\Controllers\Api\TerminalController;
 use Illuminate\Support\Facades\Route;
@@ -143,7 +144,7 @@ Route::prefix('v1')->group(function () {
                 Route::get('/fees', [ReportController::class, 'fees'])->middleware('permission:reports.fees');
                 Route::get('/balances', [ReportController::class, 'balances'])->middleware('permission:reports.balances');
                 
-                // Export pdf
+                // Export pdf (Admin only)
                 Route::get('/export/{type}', [ReportController::class, 'exportData'])
                     ->where('type', 'transactions|topups|fees|balances');
                 Route::post('/export/combined', [ReportController::class, 'exportCombinedData']);
@@ -186,16 +187,16 @@ Route::prefix('v1')->group(function () {
         // Transaction Management (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('transactions')->group(function () {
             // ✅ Static routes HARUS di atas dynamic routes
+            Route::get('/schedules', [TransactionController::class, 'schedules'])->middleware('permission:transactions.view');
             Route::post('/search', [TransactionController::class, 'search'])->middleware('permission:transactions.view');
             Route::post('/seat-map', [TransactionController::class, 'seatMap'])->middleware('permission:transactions.view');
             Route::post('/book', [TransactionController::class, 'book'])->middleware('permission:transactions.create');
             Route::post('/pay', [TransactionController::class, 'pay'])->middleware('permission:transactions.pay');
             
-            Route::get('/schedules', [TransactionController::class, 'schedules'])->middleware('permission:transactions.view');
             Route::get('/statistics', [TransactionController::class, 'statistics'])->middleware('permission:transactions.view');
             Route::get('/history', [TransactionController::class, 'history'])->middleware('permission:transactions.view');
 
-            // Dynamic route di bawah
+            // Dynamic routes di bawah
             Route::get('/{trx_code}', [TransactionController::class, 'detail'])->middleware('permission:transactions.view');
             Route::get('/{trx_code}/print', [TransactionController::class, 'print'])->middleware('permission:transactions.view');
             Route::post('/{trx_code}/issue', [TransactionController::class, 'issue'])->middleware('permission:transactions.issue');
@@ -204,18 +205,24 @@ Route::prefix('v1')->group(function () {
 
         // Tickets (admin & mitra)
         Route::middleware('role.permission:admin,mitra')->prefix('tickets')->group(function () {
+            // Static routes HARUS di atas dynamic routes
+            Route::prefix('reschedule')->group(function () {
+                Route::get('/available', [TicketRescheduleController::class, 'getRescheduleableTickets']);
+                Route::get('/schedules', [TicketRescheduleController::class, 'getAvailableSchedules']);
+                Route::get('/seats', [TicketRescheduleController::class, 'getAvailableSeats']);
+                Route::post('/calculate-fee', [TicketRescheduleController::class, 'calculateRescheduleFee']);
+                Route::post('/transaction', [TicketRescheduleController::class, 'rescheduleTransaction']);
+                Route::post('/', [TicketRescheduleController::class, 'rescheduleTicket']);
+            });
+            
+            // Dynamic routes di bawah
             Route::get('/{id}', [TicketController::class, 'show']);
             Route::get('/{id}/data', [TicketController::class, 'getTicketData']);
             Route::post('/{id}/reschedule', [TicketController::class, 'reschedule']);
+            Route::get('/{ticketId}/reschedule-history', [TicketRescheduleController::class, 'getRescheduleHistory']);
         });
 
-        // Reports (admin & mitra)
-        Route::middleware('role.permission:admin,mitra')->prefix('reports')->group(function () {
-            Route::get('/transactions', [ReportController::class, 'transactions'])->middleware('permission:reports.transactions');
-            Route::get('/topups', [ReportController::class, 'topups'])->middleware('permission:reports.topups');
-            Route::get('/fees', [ReportController::class, 'fees'])->middleware('permission:reports.fees');
-            Route::get('/balances', [ReportController::class, 'balances'])->middleware('permission:reports.balances');
-        });
+
     });
 
     // Callback (No Auth)

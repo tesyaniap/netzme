@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             CitySeeder::class,
             TerminalSeeder::class,
+            ScheduleSeeder::class,
             TopupSeeder::class,
         ]);
     }

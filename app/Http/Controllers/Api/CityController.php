@@ -15,7 +15,7 @@ class CityController extends Controller
      */
     public function index()
     {
-        $cities = City::all();
+        $cities = City::withCount('terminals')->get();
         
         return response()->json([
             'success' => true,
@@ -27,6 +27,7 @@ class CityController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
+            'code' => 'required|string|max:10|unique:cities,code',
             'province' => 'required|string'
         ]);
 
@@ -82,6 +83,7 @@ class CityController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'string',
+            'code' => 'string|max:10|unique:cities,code,' . $id,
             'province' => 'string'
         ]);
 

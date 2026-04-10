@@ -15,7 +15,13 @@ class ScheduleController extends Controller
      */
     public function index()
     {
-        $schedules = Schedule::with(['vehicle', 'route'])->get();
+        $schedules = Schedule::with([
+            'vehicle',
+            'route.originCity',
+            'route.destinationCity',
+            'route.departureTerminal',
+            'route.arrivalTerminal'
+        ])->get();
         
         return response()->json([
             'success' => true,
@@ -33,7 +39,8 @@ class ScheduleController extends Controller
             'route_id' => 'required|exists:routes,id',
             'departure_time' => 'required|date_format:H:i',
             'arrival_time' => 'required|date_format:H:i|after:departure_time',
-            'price' => 'required|numeric|min:0'
+            'price' => 'required|numeric|min:0',
+            'travel_date' => 'nullable|date'
         ]);
 
         if ($validator->fails()) {
@@ -48,7 +55,13 @@ class ScheduleController extends Controller
         
         return response()->json([
             'success' => true,
-            'data' => new ScheduleResource($schedule->load(['vehicle', 'route']))
+            'data' => new ScheduleResource($schedule->load([
+                'vehicle',
+                'route.originCity',
+                'route.destinationCity',
+                'route.departureTerminal',
+                'route.arrivalTerminal'
+            ]))
         ], 201);
     }
 
@@ -57,7 +70,13 @@ class ScheduleController extends Controller
     */
     public function show($id)
     {
-        $schedule = Schedule::with(['vehicle', 'route'])->find($id);
+        $schedule = Schedule::with([
+            'vehicle',
+            'route.originCity',
+            'route.destinationCity',
+            'route.departureTerminal',
+            'route.arrivalTerminal'
+        ])->find($id);
         
         if (!$schedule) {
             return response()->json([
@@ -87,12 +106,22 @@ class ScheduleController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'vehicle_id' => 'exists:vehicles,id',
-            'route_id' => 'exists:routes,id',
-            'departure_time' => 'date_format:H:i',
-            'arrival_time' => 'date_format:H:i|after:departure_time',
-            'price' => 'numeric|min:0'
+            'vehicle_id' => 'sometimes|exists:vehicles,id',
+            'route_id' => 'sometimes|exists:routes,id',
+            'departure_time' => 'sometimes|date_format:H:i',
+            'arrival_time' => 'sometimes|date_format:H:i',
+            'price' => 'sometimes|numeric|min:0',
+            'travel_date' => 'nullable|date'
         ]);
+        
+        // Custom validation for arrival_time after departure_time
+        if ($request->has('departure_time') && $request->has('arrival_time')) {
+            $validator->after(function ($validator) use ($request) {
+                if (strtotime($request->arrival_time) <= strtotime($request->departure_time)) {
+                    $validator->errors()->add('arrival_time', 'Arrival time must be after departure time.');
+                }
+            });
+        }
 
         if ($validator->fails()) {
             return response()->json([
@@ -102,11 +131,18 @@ class ScheduleController extends Controller
             ], 422);
         }
 
+        // Simple update with all request data
         $schedule->update($request->all());
         
         return response()->json([
             'success' => true,
-            'data' => new ScheduleResource($schedule->load(['vehicle', 'route']))
+            'data' => new ScheduleResource($schedule->load([
+                'vehicle',
+                'route.originCity',
+                'route.destinationCity',
+                'route.departureTerminal',
+                'route.arrivalTerminal'
+            ]))
         ]);
     }
 

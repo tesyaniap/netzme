@@ -15,6 +15,13 @@ class Ticket extends Model
         'status'
     ];
 
+    // Status constants
+    const STATUS_BOOKED = 'booked';
+    const STATUS_PAID = 'paid';
+    const STATUS_ISSUED = 'issued';
+    const STATUS_CANCELLED = 'cancelled';
+    const STATUS_RESCHEDULED = 'rescheduled';
+
     public function transaction()
     {
         return $this->belongsTo(Transaction::class);
@@ -38,5 +45,20 @@ class Ticket extends Model
     public function reschedules()
     {
         return $this->hasMany(TicketReschedule::class);
+    }
+
+    public function latestReschedule()
+    {
+        return $this->hasOne(TicketReschedule::class)->latest('rescheduled_at');
+    }
+
+    public function canBeRescheduled(): bool
+    {
+        return $this->status === self::STATUS_PAID;
+    }
+
+    public function isRescheduled(): bool
+    {
+        return $this->status === self::STATUS_RESCHEDULED;
     }
 }

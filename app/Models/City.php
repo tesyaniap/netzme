@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class City extends Model
 {
-    protected $fillable = ['name', 'province'];
+    protected $fillable = ['name', 'code', 'province'];
 
     public function terminals()
     {

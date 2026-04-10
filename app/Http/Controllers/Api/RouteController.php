@@ -15,7 +15,12 @@ class RouteController extends Controller
      */
     public function index()
     {
-        $routes = Route::with(['originCity', 'destinationCity', 'departureTerminal', 'arrivalTerminal'])->get();
+        $routes = Route::with([
+            'originCity',
+            'destinationCity',
+            'departureTerminal',
+            'arrivalTerminal'
+        ])->get();
         
         return response()->json([
             'success' => true,
