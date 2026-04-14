@@ -439,6 +439,8 @@ class TransactionController extends Controller
             'schedule.route.departureTerminal:id,name',
             'schedule.route.arrivalTerminal:id,name',
             'tickets.seat:id,seat_number,row,column',
+            'tickets.schedule.route.originCity',
+            'tickets.schedule.route.destinationCity',
             'passengers:id,transaction_id,name,identity_number,seat_number'
         ]);
         
@@ -509,6 +511,18 @@ class TransactionController extends Controller
                     'id' => $ticket->id,
                     'status' => $ticket->status,
                     'price' => $ticket->price,
+                    'schedule_id' => $ticket->schedule_id,
+                    'schedule' => $ticket->schedule ? [
+                        'id' => $ticket->schedule->id,
+                        'departure_time' => $ticket->schedule->departure_time,
+                        'arrival_time' => $ticket->schedule->arrival_time,
+                        'travel_date' => $ticket->schedule->travel_date
+                            ? $ticket->schedule->travel_date->format('Y-m-d') : null,
+                        'route' => $ticket->schedule->route ? [
+                            'origin_city' => optional($ticket->schedule->route->originCity)->name ?? '-',
+                            'destination_city' => optional($ticket->schedule->route->destinationCity)->name ?? '-',
+                        ] : null,
+                    ] : null,
                     'seat' => $ticket->seat ? [
                         'id' => $ticket->seat->id,
                         'seat_number' => $ticket->seat->seat_number,
@@ -778,19 +792,24 @@ class TransactionController extends Controller
      */
     public function print($trxCode)
     {
-        $transaction = Transaction::where('trx_code', $trxCode)
-                                  ->where('mitra_id', request()->user()->mitra_id)
-                                  ->with([
-                                      'schedule.route.originCity',
-                                      'schedule.route.destinationCity',
-                                      'schedule.route.departureTerminal',
-                                      'schedule.route.arrivalTerminal',
-                                      'schedule.vehicle',
-                                      'tickets.seat',
-                                      'passengers',
-                                      'mitra',
-                                  ])
-                                  ->first();
+        $query = Transaction::where('trx_code', $trxCode)
+                              ->with([
+                                  'schedule.route.originCity',
+                                  'schedule.route.destinationCity',
+                                  'schedule.route.departureTerminal',
+                                  'schedule.route.arrivalTerminal',
+                                  'schedule.vehicle',
+                                  'tickets.seat',
+                                  'passengers',
+                                  'mitra',
+                              ]);
+
+        // Mitra hanya bisa cetak tiket miliknya sendiri
+        if (request()->user()->hasRole('mitra')) {
+            $query->where('mitra_id', request()->user()->mitra_id);
+        }
+
+        $transaction = $query->first();
 
         if (!$transaction) {
             return response()->json([
@@ -799,7 +818,17 @@ class TransactionController extends Controller
             ], 404);
         }
 
-        if ($transaction->status !== 'issued') {
+        if (!in_array($transaction->status, ['issued', 'rescheduled', 'paid'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tiket belum bisa dicetak',
+            ], 400);
+        }
+
+        // Cek status dari tiket (bukan transaksi)
+        $firstTicket = $transaction->tickets->first();
+        $ticketStatus = $firstTicket ? $firstTicket->status : $transaction->status;
+        if (!in_array($ticketStatus, ['issued', 'rescheduled'])) {
             return response()->json([
                 'success' => false,
                 'message' => 'Tiket belum bisa dicetak',
@@ -809,6 +838,23 @@ class TransactionController extends Controller
         $schedule = $transaction->schedule;
         $route    = $schedule ? $schedule->route : null;
         $vehicle  = $schedule ? $schedule->vehicle : null;
+
+        // Jika tiket sudah rescheduled, pakai schedule dari tiket (bukan dari transaksi)
+        $firstTicket = $transaction->tickets->first();
+        if ($firstTicket && $firstTicket->schedule_id !== $transaction->schedule_id) {
+            $ticketSchedule = \App\Models\Schedule::with([
+                'route.originCity',
+                'route.destinationCity',
+                'route.departureTerminal',
+                'route.arrivalTerminal',
+                'vehicle',
+            ])->find($firstTicket->schedule_id);
+            if ($ticketSchedule) {
+                $schedule = $ticketSchedule;
+                $route    = $ticketSchedule->route;
+                $vehicle  = $ticketSchedule->vehicle;
+            }
+        }
 
         // Seat numbers from tickets
         $seatNumbers = $transaction->tickets

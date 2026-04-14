@@ -30,6 +30,23 @@ class TopupController extends Controller
 
         $topups = $query->latest()->paginate($perPage);
 
+        // Tambahkan URL lengkap untuk proof_file
+        $topups->getCollection()->transform(function ($topup) {
+            if ($topup->proof_file) {
+                // Handle path dengan atau tanpa subfolder
+                $path = $topup->proof_file;
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+                    $topup->proof_file_url = \Illuminate\Support\Facades\Storage::disk('public')->url($path);
+                } else {
+                    // Fallback: coba dengan prefix topups/
+                    $topup->proof_file_url = url('storage/' . $path);
+                }
+            } else {
+                $topup->proof_file_url = null;
+            }
+            return $topup;
+        });
+
         return $this->successResponse($topups, 'Topups retrieved successfully');
     }
 

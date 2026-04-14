@@ -13,12 +13,22 @@ class PartnerFeeLedger extends Model
         'transaction_id',
         'amount',
         'type',
-        'description'
+        'description',
+        'balance_before',
+        'balance_after',
+        'created_at',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2'
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function ($model) {
+            $model->created_at = now();
+        });
+    }
 
     public function mitra()
     {

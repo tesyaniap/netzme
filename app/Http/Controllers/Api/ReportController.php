@@ -56,9 +56,14 @@ class ReportController extends Controller
         if ($request->status) {
             if ($request->status === 'success') {
                 $query->whereIn('status', ['paid', 'issued']);
+            } elseif ($request->status === 'all') {
+                // no filter
             } else {
                 $query->where('status', $request->status);
             }
+        } else {
+            // Default: tampilkan paid, issued, rescheduled
+            $query->whereIn('status', ['paid', 'issued', 'rescheduled']);
         }
 
         $transactions = $query->latest('id')->paginate($request->per_page ?? 5);

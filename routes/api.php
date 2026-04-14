@@ -149,6 +149,17 @@ Route::prefix('v1')->group(function () {
                     ->where('type', 'transactions|topups|fees|balances');
                 Route::post('/export/combined', [ReportController::class, 'exportCombinedData']);
             });
+
+            // Ticket Reschedule (Admin only)
+            Route::prefix('tickets')->group(function () {
+                Route::prefix('reschedule')->group(function () {
+                    Route::get('/schedules',      [TicketRescheduleController::class, 'getAvailableSchedules']);
+                    Route::get('/seats',          [TicketRescheduleController::class, 'getAvailableSeats']);
+                    Route::post('/calculate-fee', [TicketRescheduleController::class, 'calculateRescheduleFee']);
+                    Route::post('/transaction',   [TicketRescheduleController::class, 'rescheduleTransaction']);
+                });
+                Route::get('/{ticketId}/reschedule-history', [TicketRescheduleController::class, 'getRescheduleHistory']);
+            });
         });
 
         // mitra
@@ -203,23 +214,10 @@ Route::prefix('v1')->group(function () {
             Route::post('/{trx_code}/cancel', [TransactionController::class, 'cancel'])->middleware('permission:transactions.cancel');
         });
 
-        // Tickets (admin & mitra)
+        // Tickets (admin & mitra) — view only
         Route::middleware('role.permission:admin,mitra')->prefix('tickets')->group(function () {
-            // Static routes HARUS di atas dynamic routes
-            Route::prefix('reschedule')->group(function () {
-                Route::get('/available', [TicketRescheduleController::class, 'getRescheduleableTickets']);
-                Route::get('/schedules', [TicketRescheduleController::class, 'getAvailableSchedules']);
-                Route::get('/seats', [TicketRescheduleController::class, 'getAvailableSeats']);
-                Route::post('/calculate-fee', [TicketRescheduleController::class, 'calculateRescheduleFee']);
-                Route::post('/transaction', [TicketRescheduleController::class, 'rescheduleTransaction']);
-                Route::post('/', [TicketRescheduleController::class, 'rescheduleTicket']);
-            });
-            
-            // Dynamic routes di bawah
             Route::get('/{id}', [TicketController::class, 'show']);
             Route::get('/{id}/data', [TicketController::class, 'getTicketData']);
-            Route::post('/{id}/reschedule', [TicketController::class, 'reschedule']);
-            Route::get('/{ticketId}/reschedule-history', [TicketRescheduleController::class, 'getRescheduleHistory']);
         });
 
 

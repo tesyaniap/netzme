@@ -13,9 +13,17 @@ class TopupHistory extends Model
         'balance_before',
         'balance_after',
         'description',
+        'created_at',
     ];
 
     public $timestamps = false;
+
+    protected static function booted(): void
+    {
+        static::creating(function ($model) {
+            $model->created_at = now();
+        });
+    }
 
     public function topup()
     {
